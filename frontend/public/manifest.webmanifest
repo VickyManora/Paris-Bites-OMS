@@ -1,0 +1,52 @@
+{
+  "name": "Paris Bites · Point of Sale",
+  "short_name": "Paris Bites",
+  "description": "Take orders, record payments and manage inventory for Paris Bites.",
+  "start_url": "/pos/new",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#fff8f2",
+  "theme_color": "#3b2416",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "food", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New order",
+      "short_name": "New order",
+      "description": "Start taking an order at the counter",
+      "url": "/pos/new",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Today's orders",
+      "short_name": "Orders",
+      "description": "Orders taken today",
+      "url": "/pos/orders",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

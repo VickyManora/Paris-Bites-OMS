@@ -1,0 +1,1435 @@
+// ============================================================================
+// Paris Bites — Inventory Management System
+// Prisma schema (Prisma 7 / PostgreSQL)
+//
+// Connection URL lives in ../prisma.config.ts (reads DATABASE_URL), which is
+// why the `datasource` block below has no `url` property.
+//
+// SCOPE: identity, access control, auditing, inventory items with their change
+// history, stock transfers between locations, suppliers and purchase invoices.
+// `Recipe`/`RecipeIngredient` are defined but not yet used by any code — they exist
+// so recipe-driven stock deduction needs no change to `inventory_items` later.
+// `PurchaseOrder` and a `StockMovement` ledger are still to come — see the
+// placeholder section at the end.
+// ============================================================================
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+/// Coarse-grained roles.
+///
+/// Permissions are NOT stored here. They are derived from the role by
+/// `core/domain/enums/permission.enum.ts`, so the set of things a role may do is
+/// reviewable in one file and cannot drift per-row. If per-user overrides are
+/// ever needed, add a Permission join table rather than more roles.
+enum Role {
+  ADMIN
+  STORE_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+// ----------------------------------------------------------------------------
+// Identity & access
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  /// Argon2/bcrypt digest. Never selected into API responses.
+  passwordHash String     @map("password_hash")
+  firstName    String     @map("first_name")
+  lastName     String     @map("last_name")
+  /// Defaults to the least-privileged role: a user created without an explicit
+  /// role must never silently gain admin rights.
+  role         Role       @default(STORE_MANAGER)
+  status       UserStatus @default(ACTIVE)
+
+  lastLoginAt DateTime? @map("last_login_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  /// Soft delete. All read paths must filter on `deletedAt: null`.
+  deletedAt DateTime? @map("deleted_at")
+
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  createdInventoryItems InventoryItem[]        @relation("InventoryItemCreatedBy")
+  inventoryHistory      InventoryItemHistory[]
+
+  requestedTransfers StockTransfer[] @relation("StockTransferRequestedBy")
+  reviewedTransfers  StockTransfer[] @relation("StockTransferReviewedBy")
+  completedTransfers StockTransfer[] @relation("StockTransferCompletedBy")
+
+  notifications  Notification[] @relation("NotificationRecipient")
+  actedOnNotices Notification[] @relation("NotificationActor")
+
+  createdSuppliers  Supplier[] @relation("SupplierCreatedBy")
+  recordedPurchases Purchase[] @relation("PurchaseRecordedBy")
+  createdRecipes    Recipe[]   @relation("RecipeCreatedBy")
+
+  recordedConsumption  ConsumptionEntry[]         @relation("ConsumptionRecordedBy")
+  voidedConsumption    ConsumptionEntry[]         @relation("ConsumptionVoidedBy")
+  consumptionRevisions ConsumptionEntryRevision[] @relation("ConsumptionRevisionActor")
+
+  recordedSales  DailySalesEntry[]         @relation("DailySalesRecordedBy")
+  salesRevisions DailySalesEntryRevision[] @relation("DailySalesRevisionActor")
+
+  placedOrders    SalesOrder[] @relation("SalesOrderPlacedBy")
+  cancelledOrders SalesOrder[] @relation("SalesOrderCancelledBy")
+  confirmedPayments Payment[]  @relation("PaymentConfirmedBy")
+
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// Opaque refresh tokens, stored hashed so a database leak cannot be replayed.
+/// Access tokens stay stateless (JWT); only refresh tokens are revocable.
+model RefreshToken {
+  id        String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique @map("token_hash")
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  /// Set when this token is rotated, pointing at its successor, so a reused
+  /// token can be detected and the whole chain revoked.
+  replacedById String?   @unique @map("replaced_by_id") @db.Uuid
+
+  userAgent String? @map("user_agent")
+  ipAddress String? @map("ip_address")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// Append-only trail. Written by the application layer, never updated.
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Nullable so the record survives deletion of the acting user.
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String  @map("entity_type")
+  entityId   String? @map("entity_id")
+
+  metadata Json?
+  ip       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ----------------------------------------------------------------------------
+// Inventory
+// ----------------------------------------------------------------------------
+
+/// Where stock physically sits. `CART` is the mobile stall; `HOME_WAREHOUSE` is
+/// the base store.
+enum InventoryLocation {
+  HOME_WAREHOUSE
+  CART
+}
+
+/// Units of measure. Mass, volume and count are deliberately not separated into
+/// their own type: conversion between them needs a density per item, which this
+/// system does not model. An item is measured in exactly one unit for its life.
+///
+/// `PACKETS`, `SHEETS` and `BOTTLES` are countable retail units the master list
+/// buys in — a packet of Oreos is not a mass and not a box, and forcing it into
+/// `PIECES` would lose the distinction between "10 packets" and "10 biscuits".
+enum InventoryUnit {
+  KG
+  GRAMS
+  LITERS
+  PIECES
+  BOXES
+  PACKETS
+  SHEETS
+  BOTTLES
+}
+
+/// Ingredient and supply groupings.
+///
+/// An enum rather than a table because categories are a fixed vocabulary here and
+/// there is no requirement to manage them at runtime. Promote to a `Category`
+/// model the moment staff need to add their own — the migration is additive.
+///
+/// The second block mirrors the Paris Bites master list. The original values are
+/// kept even though no master item uses some of them: `stock_transfer_lines` and
+/// `purchase_lines` snapshot the category of what they moved, and Postgres cannot
+/// drop an enum value that historical rows still hold.
+enum InventoryCategory {
+  FLOUR_AND_GRAINS
+  DAIRY
+  CHOCOLATE
+  FRUIT
+  NUTS_AND_SEEDS
+  SUGAR_AND_SWEETENERS
+  FATS_AND_OILS
+  EGGS
+  FLAVOURING
+  DECORATION
+  PACKAGING
+  EQUIPMENT
+  OTHER
+  WAFFLE_PREMIX
+  BOWL_PREMIX
+  CHOCOLATE_FILLINGS
+  SPREADS_AND_SAUCES
+  TOPPINGS_AND_FLAVOURS
+  KITCHEN_ESSENTIALS
+  CLEANING_AND_HYGIENE
+}
+
+/// Lifecycle state, NOT stock level.
+///
+/// Whether an item is low or out of stock is derived from `currentQuantity` versus
+/// `minimumQuantity` and is never stored — a stored copy would be one write away
+/// from disagreeing with the quantities it describes.
+enum InventoryItemStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InventoryHistoryAction {
+  CREATED
+  UPDATED
+  QUANTITY_ADJUSTED
+  STATUS_CHANGED
+  DELETED
+  RESTORED
+  /// Stock left this item as part of a transfer (the source leg).
+  TRANSFER_OUT
+  /// Stock arrived at this item as part of a transfer (the destination leg).
+  TRANSFER_IN
+  /// Stock arrived by purchase from a supplier. Distinct from TRANSFER_IN because
+  /// the origin is outside the business, which is what a stock-in report needs to
+  /// separate: goods bought versus goods moved between our own locations.
+  PURCHASED
+  /// Stock left because a completed order consumed it through a recipe.
+  ///
+  /// Reserved for the automatic deduction described alongside `Recipe` below. It is
+  /// its own action rather than a `QUANTITY_ADJUSTED` with a note, because "what did
+  /// selling desserts consume" is the question a consumption report asks, and a note
+  /// is not something a report can group by.
+  RECIPE_CONSUMED
+  /// Stock the kitchen used, entered by hand on a daily consumption sheet.
+  ///
+  /// Distinct from `RECIPE_CONSUMED`, which a completed order will deduct automatically:
+  /// this is someone reporting what was actually used, and the two answer different
+  /// questions when they eventually sit side by side — what the recipes say should have
+  /// gone, versus what went.
+  ///
+  /// One action covers recording, editing and voiding a consumption entry. The signed
+  /// before/after already says which way the stock moved, and keeping them under one
+  /// action means "what did we consume this month" is a single sum in which a correction
+  /// nets off against the figure it corrects.
+  CONSUMED
+}
+
+model InventoryItem {
+  id       String            @id @default(uuid()) @db.Uuid
+  name     String
+  category InventoryCategory
+  unit     InventoryUnit
+  location InventoryLocation
+
+  /// Decimal, not Float: 0.1 kg + 0.2 kg must equal 0.3 kg. Three decimal places
+  /// covers grams-in-kilograms, which is the finest measure this business needs.
+  currentQuantity Decimal @default(0) @map("current_quantity") @db.Decimal(12, 3)
+  /// What the item held when it was first set up, frozen at creation.
+  ///
+  /// Not derivable from history: the ledger can be truncated, and an item created
+  /// with stock already on the shelf has no movement explaining where it came from.
+  /// Keeping it lets a report say "opened at 20 kg, now at 6 kg" without walking
+  /// every entry.
+  openingQuantity Decimal @default(0) @map("opening_quantity") @db.Decimal(12, 3)
+  /// Reorder threshold. `currentQuantity <= minimumQuantity` is the low-stock rule.
+  minimumQuantity Decimal @default(0) @map("minimum_quantity") @db.Decimal(12, 3)
+
+  /// Latest known cost per unit, excluding tax. Nullable — an item can be tracked
+  /// before anyone has priced it, and 0 would be a claim rather than an absence.
+  ///
+  /// `Decimal(14, 4)` matches `PurchaseLine.unitRate` exactly, so recording a
+  /// purchase can refresh this figure without a rounding step.
+  purchasePrice Decimal? @map("purchase_price") @db.Decimal(14, 4)
+
+  /// Usual vendor. Advisory only: a purchase may name any supplier, and this is what
+  /// the reorder list suggests, not a constraint on where stock may come from.
+  supplierId String?   @map("supplier_id") @db.Uuid
+  supplier   Supplier? @relation("InventoryItemSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
+
+  /// Whether this item may raise a low-stock alert.
+  ///
+  /// Separate from `minimumQuantity` being 0. A threshold of 0 means "no level is
+  /// defined"; this flag means "a level is defined but do not page anyone about it",
+  /// which is what silencing a noisy consumable needs without losing the figure.
+  /// Alerting reads this; the derived stock status never does — see the entity.
+  lowStockAlertEnabled Boolean @default(true) @map("low_stock_alert_enabled")
+
+  /// Supplier's batch/lot marking for the stock currently held. Free text: every
+  /// vendor formats it differently, and normalising it would reject valid labels.
+  batchNumber String?   @map("batch_number")
+  /// Expiry of the stock currently held. `@db.Date` — expiry is a calendar day, and
+  /// storing a timestamp would make "expires today" depend on the clock.
+  expiryDate  DateTime? @map("expiry_date") @db.Date
+
+  status InventoryItemStatus @default(ACTIVE)
+  notes  String?
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("InventoryItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  /// Soft delete. History must survive the item it describes.
+  deletedAt DateTime? @map("deleted_at")
+
+  history           InventoryItemHistory[]
+  transferLines     StockTransferLine[]
+  purchaseLines     PurchaseLine[]
+  recipeIngredients RecipeIngredient[]
+  consumptionLines  ConsumptionLine[]
+
+  // Name is unique per location, so the same ingredient can exist in both the
+  // warehouse and the cart. Enforced by a PARTIAL unique index scoped to
+  // `deleted_at IS NULL`, added by raw SQL in the migration: Prisma cannot express
+  // partial indexes, and a plain @@unique would let a deleted row block reuse of
+  // its name forever.
+  @@index([location])
+  @@index([category])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([supplierId])
+  // Serves the expiry report and the "expiring soon" list.
+  @@index([expiryDate])
+  // Supports the default list ordering without a sort.
+  @@index([location, category, name])
+  @@map("inventory_items")
+}
+
+/// Append-only audit trail for one item.
+///
+/// This records what changed, not what the quantity *is* — `currentQuantity` on the
+/// item remains the source of truth. When a full `StockMovement` ledger lands, that
+/// becomes authoritative and `currentQuantity` becomes a cached projection of it.
+model InventoryItemHistory {
+  id String @id @default(uuid()) @db.Uuid
+
+  itemId String        @map("item_id") @db.Uuid
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  action InventoryHistoryAction
+
+  /// Populated only for quantity changes. Null for pure metadata edits.
+  quantityBefore Decimal? @map("quantity_before") @db.Decimal(12, 3)
+  quantityAfter  Decimal? @map("quantity_after") @db.Decimal(12, 3)
+
+  /// Field-level before/after for metadata edits, e.g.
+  /// `{ "name": { "from": "Butter", "to": "Unsalted butter" } }`.
+  changes Json?
+  note    String?
+
+  /// Nullable so the record survives deletion of the acting user.
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([itemId, createdAt])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("inventory_item_history")
+}
+
+// ----------------------------------------------------------------------------
+// Stock transfers
+// ----------------------------------------------------------------------------
+
+/// Lifecycle of a transfer document.
+///
+/// Two-phase on purpose, because stock physically leaves before it arrives:
+///
+///   PENDING  --approve--> APPROVED --complete--> COMPLETED
+///      \--reject--> REJECTED
+///
+/// - `APPROVED` means authorised and **dispatched**: the source quantity has already been
+///   deducted, and the goods are in transit. Nothing is double-counted, because the
+///   destination has not been credited yet.
+/// - `COMPLETED` means received: the destination has been credited.
+///
+/// Collapsing the two would make `APPROVED` and `COMPLETED` the same state. Keeping them
+/// apart is also what lets the system answer "what is in transit right now".
+enum StockTransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model StockTransfer {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Human-readable identifier, e.g. `TR-000042`. Generated from a Postgres sequence
+  /// (see the migration) rather than a row count, which would race under concurrency.
+  reference String @unique
+
+  /// Both recorded even though only HOME_WAREHOUSE -> CART is offered today. Storing the
+  /// direction means adding the reverse leg later needs no migration and no
+  /// reinterpretation of existing rows.
+  fromLocation InventoryLocation @map("from_location")
+  toLocation   InventoryLocation @map("to_location")
+
+  status StockTransferStatus @default(PENDING)
+  notes  String?
+
+  requestedById String   @map("requested_by_id") @db.Uuid
+  requestedBy   User     @relation("StockTransferRequestedBy", fields: [requestedById], references: [id])
+  requestedAt   DateTime @default(now()) @map("requested_at")
+
+  /// Set on approval or rejection — the review decision, whichever way it went.
+  reviewedById String?   @map("reviewed_by_id") @db.Uuid
+  reviewedBy   User?     @relation("StockTransferReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime? @map("reviewed_at")
+  /// Required when rejecting: a refusal without a reason is not actionable.
+  reviewNote   String?   @map("review_note")
+
+  completedById String?   @map("completed_by_id") @db.Uuid
+  completedBy   User?     @relation("StockTransferCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt   DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lines StockTransferLine[]
+
+  @@index([status])
+  @@index([requestedAt])
+  @@index([status, requestedAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id String @id @default(uuid()) @db.Uuid
+
+  transferId String        @map("transfer_id") @db.Uuid
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  /// The source item, at the transfer's `fromLocation`.
+  ///
+  /// `Restrict` rather than `Cascade`: deleting an item must not silently erase the
+  /// transfer lines that moved its stock. Items are soft-deleted anyway, so this only
+  /// guards against a hard delete.
+  itemId String        @map("item_id") @db.Uuid
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  quantity Decimal @db.Decimal(12, 3)
+
+  /// Snapshot of the item's identity at request time.
+  ///
+  /// Denormalised so a completed transfer still reads correctly after the item is
+  /// renamed, recategorised or deleted — a historical document must not change meaning
+  /// because master data moved on. It is also what lets completion create the matching
+  /// destination item when none exists yet.
+  itemName String            @map("item_name")
+  unit     InventoryUnit
+  category InventoryCategory
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// One line per item per transfer; adding the same item twice is a mistake, not a
+  /// second line to sum.
+  @@unique([transferId, itemId])
+  @@index([itemId])
+  @@map("stock_transfer_lines")
+}
+
+// ----------------------------------------------------------------------------
+// Purchasing
+// ----------------------------------------------------------------------------
+
+/// Vendor master data.
+///
+/// `gstin` and `stateCode` together are what decide the tax split on every purchase from
+/// this supplier: same state as the business means CGST + SGST, a different state means
+/// IGST. Storing the state on the supplier rather than deriving it from the GSTIN string
+/// each time keeps that decision one field lookup, and lets an unregistered supplier
+/// (no GSTIN) still have a place of supply.
+model Supplier {
+  id String @id @default(uuid()) @db.Uuid
+
+  name      String
+  /// 15-character GST identification number. Nullable: small suppliers below the
+  /// registration threshold legitimately have none, and a purchase from them is still
+  /// a purchase — it simply carries no input tax credit.
+  ///
+  /// Uniqueness is a PARTIAL index scoped to `deleted_at IS NULL`, added by raw SQL in
+  /// the migration — the same treatment as inventory item names. Prisma cannot express
+  /// partial indexes, and a plain `@unique` would let a removed supplier block its own
+  /// GSTIN from ever being re-registered.
+  gstin     String?
+  /// Two-digit GST state code, e.g. "27" for Maharashtra. Required even without a
+  /// GSTIN, because place of supply drives the tax split regardless of registration.
+  stateCode String  @map("state_code") @db.VarChar(2)
+
+  contactName String? @map("contact_name")
+  email       String?
+  phone       String?
+  addressLine String? @map("address_line")
+  city        String?
+  notes       String?
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  /// Soft delete. Purchase history must survive the supplier it names.
+  deletedAt DateTime? @map("deleted_at")
+
+  purchases      Purchase[]
+  /// Items that name this supplier as their usual vendor. `SetNull` on the other
+  /// side, so removing a supplier orphans the preference rather than the item.
+  inventoryItems InventoryItem[] @relation("InventoryItemSupplier")
+
+  @@index([isActive])
+  @@index([deletedAt])
+  @@index([name])
+  @@map("suppliers")
+}
+
+/// Whether a purchase is taxed as intra-state or inter-state.
+///
+/// Stored on the row rather than recomputed from the supplier's state at read time. The
+/// business could relocate, or a supplier's registration could change, and a historical
+/// invoice must keep reporting the split it was actually filed with.
+enum GstTreatment {
+  /// Supplier in the same state: tax splits into CGST + SGST.
+  INTRA_STATE
+  /// Supplier in a different state: a single IGST amount.
+  INTER_STATE
+  /// Supplier has no GSTIN. No tax, no input credit.
+  UNREGISTERED
+}
+
+/// A supplier invoice, recorded after the fact.
+///
+/// This is **not** a purchase order — nothing here is requested, approved or awaited. The
+/// goods have already arrived and been paid for or invoiced; recording one increases stock
+/// immediately, in the same transaction. `PurchaseOrder` in the placeholder section below
+/// remains a separate, future thing.
+///
+/// Immutable once written. It has already moved stock, so a correction is an inventory
+/// adjustment rather than an edit — the same rule stock transfers follow, and for the same
+/// reason: a document that can be rewritten after it has moved goods makes the stock ledger
+/// unreconstructable.
+model Purchase {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The supplier's own invoice number, not ours — so it is not generated, and it is
+  /// unique per supplier rather than globally. Two suppliers may both issue "INV-001".
+  invoiceNumber String   @map("invoice_number")
+  invoiceDate   DateTime @map("invoice_date") @db.Date
+
+  supplierId String   @map("supplier_id") @db.Uuid
+  /// `Restrict`: a supplier with purchase history cannot be hard-deleted out from under
+  /// its invoices. Suppliers are soft-deleted anyway.
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  /// Snapshot of the supplier's tax identity at invoice time, because both can change and
+  /// a filed invoice must not change meaning when they do.
+  supplierGstin     String?      @map("supplier_gstin")
+  supplierStateCode String       @map("supplier_state_code") @db.VarChar(2)
+  gstTreatment      GstTreatment @map("gst_treatment")
+
+  /// Money is `Decimal(14, 2)`, never Float. Two places because that is the currency
+  /// scale; 14 digits leaves room well past any plausible single invoice.
+  ///
+  /// All four are stored rather than derived on read. They are the numbers that were
+  /// filed, and recomputing them later from lines would silently restate a historical
+  /// invoice if a rounding rule ever changed.
+  subtotal    Decimal @db.Decimal(14, 2)
+  totalCgst   Decimal @default(0) @map("total_cgst") @db.Decimal(14, 2)
+  totalSgst   Decimal @default(0) @map("total_sgst") @db.Decimal(14, 2)
+  totalIgst   Decimal @default(0) @map("total_igst") @db.Decimal(14, 2)
+  totalTax    Decimal @default(0) @map("total_tax") @db.Decimal(14, 2)
+  totalAmount Decimal @map("total_amount") @db.Decimal(14, 2)
+
+  notes String?
+
+  // --- Invoice file ---------------------------------------------------------
+  //
+  // Metadata inline rather than in its own table: a purchase has at most one invoice
+  // file, so a 1:1 side table would buy nothing but a join. All fields are null together
+  // when nothing has been uploaded.
+  //
+  /// Name as the user's filesystem had it. Display only — never used to build a path.
+  invoiceFileName   String?   @map("invoice_file_name")
+  /// Opaque generated name on disk. Separate from `invoiceFileName` so a hostile
+  /// upload called "../../etc/passwd" cannot influence where bytes land.
+  invoiceStoredName String?   @map("invoice_stored_name")
+  invoiceMimeType   String?   @map("invoice_mime_type")
+  invoiceSizeBytes  Int?      @map("invoice_size_bytes")
+  /// SHA-256 of the stored bytes, so a silently corrupted or swapped file is detectable.
+  invoiceChecksum   String?   @map("invoice_checksum")
+  invoiceUploadedAt DateTime? @map("invoice_uploaded_at")
+
+  recordedById String? @map("recorded_by_id") @db.Uuid
+  recordedBy   User?   @relation("PurchaseRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lines PurchaseLine[]
+
+  /// One invoice number per supplier. A duplicate is nearly always the same bill entered
+  /// twice, which would double-count stock — so the database refuses it rather than
+  /// trusting every caller to check.
+  @@unique([supplierId, invoiceNumber])
+  @@index([invoiceDate])
+  @@index([supplierId, invoiceDate])
+  @@map("purchases")
+}
+
+/// One line of a supplier invoice, and the stock it added.
+model PurchaseLine {
+  id String @id @default(uuid()) @db.Uuid
+
+  purchaseId String   @map("purchase_id") @db.Uuid
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  /// The inventory item this stock went into, always at the Home Warehouse.
+  ///
+  /// `Restrict` for the same reason as transfer lines: deleting an item must not erase
+  /// the financial record of buying it.
+  itemId String        @map("item_id") @db.Uuid
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Snapshot of the item's identity at purchase time, so a renamed or deleted item
+  /// does not change what a historical invoice says was bought.
+  itemName String            @map("item_name")
+  unit     InventoryUnit
+  category InventoryCategory
+
+  /// `Decimal(12, 3)`, matching inventory quantities exactly — this number is added
+  /// straight onto `InventoryItem.currentQuantity`, and a different scale here would
+  /// round on every purchase.
+  quantity Decimal @db.Decimal(12, 3)
+
+  /// Price per unit before tax. Four decimal places, not two: a per-gram or per-piece
+  /// rate is routinely finer than currency scale, and rounding it to paise before
+  /// multiplying by 5000 units would visibly miss the invoice total.
+  unitRate Decimal @map("unit_rate") @db.Decimal(14, 4)
+
+  /// Harmonised System of Nomenclature code. Nullable — required for GST filing, but
+  /// not something to block recording an invoice over.
+  hsnCode String? @map("hsn_code") @db.VarChar(8)
+
+  /// GST rate as a percentage, e.g. 18 for 18%. `Decimal(5, 2)` covers the fractional
+  /// rates that exist (0.25%, 1.5%, 3%).
+  gstRatePercent Decimal @default(0) @map("gst_rate_percent") @db.Decimal(5, 2)
+
+  /// Per-line money, all stored. `taxableAmount` is quantity x rate less any discount;
+  /// the three tax columns are what that rate produced under this invoice's treatment,
+  /// exactly two of which are always zero.
+  taxableAmount Decimal @map("taxable_amount") @db.Decimal(14, 2)
+  cgstAmount    Decimal @default(0) @map("cgst_amount") @db.Decimal(14, 2)
+  sgstAmount    Decimal @default(0) @map("sgst_amount") @db.Decimal(14, 2)
+  igstAmount    Decimal @default(0) @map("igst_amount") @db.Decimal(14, 2)
+  lineTotal     Decimal @map("line_total") @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// One line per item per invoice. The same item twice is a data-entry mistake, not
+  /// two lines to sum — the same rule transfer lines follow.
+  @@unique([purchaseId, itemId])
+  @@index([itemId])
+  @@map("purchase_lines")
+}
+
+// ----------------------------------------------------------------------------
+// Notifications
+// ----------------------------------------------------------------------------
+
+/// What happened, from the recipient's point of view.
+///
+/// Named after the event rather than the audience, so one event that fans out to
+/// several people produces rows of the same type. The type drives the icon, the colour
+/// and the link the UI builds — never the wording, which is stored per row.
+enum NotificationType {
+  /// A Store Manager raised a transfer request. Sent to every admin.
+  TRANSFER_REQUESTED
+  /// An admin approved and dispatched it. Sent to the requester.
+  TRANSFER_APPROVED
+  /// An admin refused it. Sent to the requester, carrying the reason.
+  TRANSFER_REJECTED
+  /// Arrival was confirmed at the destination. Sent to the requester.
+  TRANSFER_COMPLETED
+
+  /// An item fell to or below its reorder level. Raised by the alert scan, not by a
+  /// person, so `actorId` is null. Routed by location: whoever can actually restock it.
+  LOW_STOCK
+  /// A supplier invoice was recorded and its stock added. Sent to every admin.
+  PURCHASE_COMPLETED
+  /// Held stock is expiring soon, or has already expired. Raised by the alert scan.
+  EXPIRY_ALERT
+}
+
+/// One delivered message for one person.
+///
+/// Fanned out at write time — a row per recipient rather than one row plus a
+/// per-user read table. Read state is the thing that is queried on every page load
+/// ("how many unread?"), and a fan-out row makes that a single indexed count instead
+/// of an anti-join. The volume is bounded by transfer activity, which is human-paced.
+///
+/// `title` and `body` are stored rather than rendered from the type at read time.
+/// A notification is a record of what someone was told; regenerating the text later
+/// would silently rewrite history when the wording or the underlying data changes.
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Cascade: notifications are personal, so they die with the account. Unlike an
+  /// audit entry, nobody needs to read someone else's inbox after they are gone.
+  recipientId String @map("recipient_id") @db.Uuid
+  recipient   User   @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  type  NotificationType
+  title String
+  body  String
+
+  /// What the notification is about, so the UI can deep-link. Kept as a loose
+  /// (type, id) pair rather than a foreign key: the next source of notifications
+  /// will not be a transfer, and a nullable FK per entity type does not scale.
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+
+  /// Who caused it. Nullable so the record survives deletion of the acting user.
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  /// Null means unread. A timestamp rather than a boolean, because "when did they
+  /// see this" is answerable for free and a boolean can never be widened to it.
+  readAt DateTime? @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// Serves the unread badge: a partial index would be tighter, but this composite
+  /// also covers the "unread only" list filter.
+  @@index([recipientId, readAt])
+  /// Serves the default newest-first list for one recipient.
+  @@index([recipientId, createdAt])
+  /// Serves the alert scan's "have we already said this about this item lately?" check,
+  /// which otherwise scans the whole table on a timer forever.
+  @@index([type, entityId, createdAt])
+  @@map("notifications")
+}
+
+// ----------------------------------------------------------------------------
+// Daily consumption
+//
+// What the kitchen actually used, entered by hand. Recording an entry deducts the
+// stock immediately, in the same transaction, exactly as a purchase adds it.
+//
+// Unlike a purchase, a consumption entry is **editable**. A purchase is a document
+// someone else issued and we transcribe; a consumption sheet is our own observation,
+// and "we used 1.2 kg, not 2.1" is a correction to that observation rather than a
+// second event. Editing re-applies the difference to stock and appends a revision,
+// so the correction is recorded rather than hidden.
+// ----------------------------------------------------------------------------
+
+/// One day's usage at one location.
+model ConsumptionEntry {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The day the stock was used — a calendar date, not the moment it was typed in.
+  /// Entries are routinely written up the next morning, so `createdAt` would answer a
+  /// different question from the one every consumption report asks.
+  entryDate DateTime @map("entry_date") @db.Date
+
+  /// Which stock this came out of. Consumption at the cart and in the kitchen draw
+  /// down different rows even for the same ingredient.
+  location InventoryLocation
+
+  notes String?
+
+  /// Bumped on every edit, and the number a revision row is keyed by. Starts at 1: the
+  /// original entry is revision 1, so "revision 3" reads as the third version rather
+  /// than the third change.
+  revision Int @default(1)
+
+  recordedById String? @map("recorded_by_id") @db.Uuid
+  recordedBy   User?   @relation("ConsumptionRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Voiding, not deleting. Setting this returns every line's stock, and the row stays
+  /// so the reversal is explicable — a consumption record that simply vanished would
+  /// leave an unexplained stock increase in the item history.
+  deletedAt  DateTime? @map("deleted_at")
+  voidedById String?   @map("voided_by_id") @db.Uuid
+  voidedBy   User?     @relation("ConsumptionVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  /// Required by the use case when voiding. A reversal without a reason is not auditable.
+  voidReason String?   @map("void_reason")
+
+  lines     ConsumptionLine[]
+  revisions ConsumptionEntryRevision[]
+
+  /// Serves the default newest-first list and the date-range filter.
+  @@index([entryDate])
+  @@index([location, entryDate])
+  @@index([deletedAt])
+  @@map("consumption_entries")
+}
+
+/// One item used, on one entry.
+model ConsumptionLine {
+  id String @id @default(uuid()) @db.Uuid
+
+  entryId String           @map("entry_id") @db.Uuid
+  entry   ConsumptionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  /// `Restrict`, like every other line table here: deleting an item must not erase the
+  /// record of having consumed it.
+  itemId String        @map("item_id") @db.Uuid
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Always in the item's own unit. The UI lets a kilogram-tracked item be entered in
+  /// grams, but converts before sending — the stored figure is canonical.
+  quantity Decimal @db.Decimal(12, 3)
+
+  /// Snapshot of the item's identity when the line was written, so a rename or a unit
+  /// change does not rewrite what a past sheet says was used.
+  itemName String        @map("item_name")
+  unit     InventoryUnit
+
+  notes String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// One line per item per entry. The same ingredient twice is a data-entry mistake, not
+  /// two amounts to sum — the same rule transfer, purchase and recipe lines follow, and
+  /// it is what lets an edit diff old against new by item id.
+  @@unique([entryId, itemId])
+  @@index([itemId])
+  @@map("consumption_lines")
+}
+
+/// What an entry looked like before a change.
+///
+/// A dedicated table rather than only an `audit_logs` row, because this is the history
+/// the entry's own screen shows: "who changed what, and from what". `audit_logs` still
+/// records the same events for the system-wide trail — that answers "what did this user
+/// do", which is a different question and a different query.
+model ConsumptionEntryRevision {
+  id String @id @default(uuid()) @db.Uuid
+
+  entryId String           @map("entry_id") @db.Uuid
+  entry   ConsumptionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  /// The revision this row describes the *creation of*. Revision 1 is the original.
+  revision Int
+
+  action ConsumptionRevisionAction
+
+  /// The lines as they stood after this revision, plus a per-item diff for an edit.
+  /// Stored as JSON rather than as rows: it is a frozen snapshot nothing joins against,
+  /// and modelling it relationally would invite it being "corrected" later.
+  snapshot Json
+
+  /// Free text from the person making the change. Required when voiding.
+  note String?
+
+  /// Nullable so the record survives deletion of the acting user.
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation("ConsumptionRevisionActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([entryId, revision])
+  @@index([entryId, createdAt])
+  @@map("consumption_entry_revisions")
+}
+
+enum ConsumptionRevisionAction {
+  CREATED
+  UPDATED
+  VOIDED
+}
+
+// ----------------------------------------------------------------------------
+// Recipes — SCHEMA ONLY, no API or UI yet
+//
+// These two tables exist so that recipe-driven stock deduction needs no change to
+// `inventory_items` when it lands. Nothing writes them today; they are deliberately
+// isolated from the working module rather than half-wired into it.
+//
+// The intended flow, using the Death by Chocolate Bowl as the worked example:
+//
+//   1. A `Recipe` named "Death by Chocolate Bowl" holds one `RecipeIngredient` per
+//      thing the dessert consumes — Chocolate Bowl Premix, Dark Chocolate, Dark
+//      Chocolate Filling, Whipping Cream, Oreo Cookies, Dessert Bowl, Wooden Spoon,
+//      Tissue Paper, Butter Paper. Packaging sits in the same list as the chocolate
+//      because both are consumed per serving; splitting them into "ingredients" and
+//      "supplies" would need two deduction paths for one event.
+//   2. Completing an order looks up the recipe, multiplies each line by the quantity
+//      sold, and calls the existing `adjustQuantity` per item — which already locks
+//      the row and writes history in one transaction. The new history action is
+//      `RECIPE_CONSUMED`.
+//
+// Deduction therefore reuses the concurrency-safe path that already exists rather
+// than introducing a second way to move stock.
+// ----------------------------------------------------------------------------
+
+/// A dessert and what one unit of it consumes.
+model Recipe {
+  id String @id @default(uuid()) @db.Uuid
+
+  name        String
+  description String?
+
+  /// How many servings one execution produces. Ingredient quantities are per
+  /// *batch*, not per serving, because that is how a kitchen writes a recipe;
+  /// deduction divides by this to get the per-serving cost.
+  yieldQuantity Decimal @default(1) @map("yield_quantity") @db.Decimal(12, 3)
+
+  /// Off means "do not deduct for this" — a recipe being retired must stop moving
+  /// stock without deleting the record of what it used to consume.
+  isActive Boolean @default(true) @map("is_active")
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("RecipeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  /// Soft delete, matching every other master-data table here.
+  deletedAt DateTime? @map("deleted_at")
+
+  ingredients RecipeIngredient[]
+
+  // Name uniqueness is a PARTIAL, case-insensitive index added by raw SQL in the
+  // migration — the same treatment as inventory item names, and for the same reason:
+  // a soft-deleted recipe must not hold its name hostage.
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("recipes")
+}
+
+/// One line of a recipe: how much of one inventory item a batch consumes.
+model RecipeIngredient {
+  id String @id @default(uuid()) @db.Uuid
+
+  recipeId String @map("recipe_id") @db.Uuid
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  /// `Restrict`, like transfer and purchase lines: deleting an item must not silently
+  /// empty the recipes that depend on it. A recipe missing an ingredient would deduct
+  /// less than it should and nobody would see why.
+  itemId String        @map("item_id") @db.Uuid
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Per batch, expressed in the item's own unit. `Decimal(12, 3)` matches
+  /// `currentQuantity` exactly so deduction never rounds.
+  quantity Decimal @db.Decimal(12, 3)
+
+  /// Snapshot of the item's unit when the line was written. Not the authority for
+  /// deduction — the item is — but it makes a unit change on the item detectable
+  /// instead of silently reinterpreting "200" from grams to kilograms.
+  unit InventoryUnit
+
+  /// A garnish that may be skipped. Deduction ignores optional lines unless the
+  /// order says otherwise, rather than always removing stock that may still be on
+  /// the shelf.
+  isOptional Boolean @default(false) @map("is_optional")
+
+  notes String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// One line per item per recipe. The same ingredient twice is a data-entry mistake,
+  /// not two amounts to sum — the same rule transfer and purchase lines follow.
+  @@unique([recipeId, itemId])
+  @@index([itemId])
+  @@map("recipe_ingredients")
+}
+
+// ----------------------------------------------------------------------------
+// Daily sales
+// ----------------------------------------------------------------------------
+
+/// Where a sale came from.
+///
+/// Walk-in is the cart itself; the other two are the aggregators, which settle
+/// separately and take a commission, so their revenue is never interchangeable with
+/// counter takings even though both are money in.
+enum SalesChannel {
+  WALK_IN
+  ZOMATO
+  SWIGGY
+}
+
+/// How the money arrived.
+///
+/// Only meaningfully varies for walk-in — the aggregators settle to the bank by
+/// definition. It is modelled on the line rather than the channel anyway, because
+/// "how much of today was cash" is a question about a day, not about a channel, and
+/// answering it from a channel enum would need a second table the day it changes.
+enum SalesPaymentMode {
+  CASH
+  ONLINE
+}
+
+enum DailySalesRevisionAction {
+  CREATED
+  UPDATED
+}
+
+/// One day's takings, entered by hand.
+///
+/// Deliberately a **daily total per channel, not a record of each sale**. The business
+/// does not have a till that itemises, and asking someone to key in every dessert would
+/// produce either nothing or fiction. A figure that is actually entered every evening is
+/// worth more than a line-item model that is not.
+///
+/// The consequence is written down here so it is not rediscovered later: with no product
+/// on a sale, **ingredient usage cannot be derived from it**. Stock is drawn down by the
+/// consumption module, which is entered separately and independently.
+model DailySalesEntry {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The trading day, not the moment it was typed in. Takings are usually written up
+  /// after closing — sometimes the next morning — so `createdAt` answers a different
+  /// question from the one every sales report asks.
+  ///
+  /// One entry per day; see the partial unique index in the migration.
+  entryDate DateTime @map("entry_date") @db.Date
+
+  /// Sum of the lines, computed on the server and never accepted from the client.
+  /// Stored rather than derived on read because every report and dashboard tile wants
+  /// it, and re-summing lines for a year of days is a join nobody needs.
+  totalAmount Decimal @map("total_amount") @db.Decimal(12, 2)
+
+  notes String?
+
+  /// Bumped on every edit. Starts at 1, so "revision 3" reads as the third version
+  /// rather than the third change — the same convention as consumption entries.
+  revision Int @default(1)
+
+  recordedById String? @map("recorded_by_id") @db.Uuid
+  recordedBy   User?   @relation("DailySalesRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// Soft delete, so a day removed in error is recoverable and the unique index can
+  /// still be re-satisfied by a fresh entry for the same date.
+  deletedAt DateTime? @map("deleted_at")
+
+  lines     DailySalesLine[]
+  revisions DailySalesEntryRevision[]
+
+  /// NOTE: uniqueness of `entryDate` is a PARTIAL unique index scoped to live rows
+  /// (`WHERE deleted_at IS NULL`), hand-written in the migration because Prisma cannot
+  /// express one — the same arrangement as the supplier name and GSTIN indexes. It is
+  /// absent here on purpose; adding `@@unique([entryDate])` would generate a full
+  /// unique index that keeps a soft-deleted day's date reserved forever.
+  @@index([entryDate])
+  @@index([deletedAt])
+  @@map("daily_sales_entries")
+}
+
+/// One channel's takings on one day.
+///
+/// A row per (channel, payment mode) rather than four columns on the entry. Adding a
+/// channel — a third aggregator, a catering line — then becomes data rather than a
+/// migration plus a schema change in four layers.
+model DailySalesLine {
+  id String @id @default(uuid()) @db.Uuid
+
+  entryId String          @map("entry_id") @db.Uuid
+  entry   DailySalesEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  channel     SalesChannel
+  paymentMode SalesPaymentMode @map("payment_mode")
+
+  /// Net takings — after any discount given. The business enters what it actually
+  /// received, which is the only figure it can reconcile against a bank statement.
+  amount Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// The same bucket twice on one day is a data-entry mistake, not two amounts to add —
+  /// the same rule transfer, purchase and consumption lines follow.
+  @@unique([entryId, channel, paymentMode])
+  @@index([channel])
+  @@map("daily_sales_lines")
+}
+
+/// Append-only record of how a day's figure has changed.
+///
+/// Sales figures get corrected — a card machine total read wrong, an aggregator payout
+/// reconciled later. Correcting one silently would make the day's revenue unfalsifiable
+/// afterwards, so each version is kept.
+model DailySalesEntryRevision {
+  id String @id @default(uuid()) @db.Uuid
+
+  entryId String          @map("entry_id") @db.Uuid
+  entry   DailySalesEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  /// The revision this row describes the creation of. Revision 1 is the original.
+  revision Int
+
+  action DailySalesRevisionAction
+
+  /// The lines and total as they stood after this revision, plus the previous total on
+  /// an edit. JSON rather than rows: a frozen snapshot nothing joins against.
+  snapshot Json
+
+  note String?
+
+  /// Nullable so the record survives deletion of the acting user.
+  actorId String? @map("actor_id") @db.Uuid
+  actor   User?   @relation("DailySalesRevisionActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([entryId, revision])
+  @@index([entryId, createdAt])
+  @@map("daily_sales_entry_revisions")
+}
+
+// ----------------------------------------------------------------------------
+// Point of sale
+//
+// The cart sells finished goods — a Death By Chocolate bowl — which are a different
+// thing from the ingredients in `inventory_items`. `Product` is that catalogue.
+//
+// NOTE: taking an order deliberately does NOT touch stock. Linking a sold bowl back to
+// the chocolate it consumed needs recipes, which is a later phase; until then stock is
+// drawn down by the consumption module. Nothing here reads or writes inventory.
+// ----------------------------------------------------------------------------
+
+/// A grouping of sellable products, and the POS tab order.
+///
+/// A table rather than an enum, unlike `InventoryCategory`: the menu changes with the
+/// seasons and staff must be able to add "Winter Specials" without a deployment.
+model ProductCategory {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String
+  /// Emoji or short label the POS tab shows beside the name.
+  icon String?
+
+  /// Tab order. Explicit rather than alphabetical — "Combos" belongs after the bowls it
+  /// combines, and no sort of the names produces that.
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  products Product[]
+
+  @@index([displayOrder])
+  @@index([deletedAt])
+  @@map("product_categories")
+}
+
+/// Something the cart sells.
+///
+/// `price` is the *current* menu price. It is snapshotted onto every order line at the
+/// moment of sale, so repricing the menu can never rewrite what a customer was charged
+/// last week — see `SalesOrderItem.unitPrice`.
+model Product {
+  id String @id @default(uuid()) @db.Uuid
+
+  categoryId String          @map("category_id") @db.Uuid
+  category   ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name        String
+  description String?
+  price       Decimal @db.Decimal(10, 2)
+
+  /// Optional image for the POS card. A URL rather than a blob: the cart runs on a tablet
+  /// over mobile data, and serving images from the API would put them behind the JWT.
+  imageUrl String? @map("image_url")
+
+  /// Whether the POS offers it. Distinct from `deletedAt`: a bowl that has sold out for
+  /// the evening is switched off and back on, not deleted and recreated.
+  isAvailable Boolean @default(true) @map("is_available")
+
+  displayOrder Int @default(0) @map("display_order")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orderItems SalesOrderItem[]
+
+  /// NOTE: uniqueness of `name` is a PARTIAL unique index scoped to live rows, written by
+  /// hand in the migration because Prisma cannot express one — the same arrangement as
+  /// the supplier indexes.
+  @@index([categoryId, displayOrder])
+  @@index([isAvailable])
+  @@index([deletedAt])
+  @@map("products")
+}
+
+/// Optional walk-in customer.
+///
+/// Every field is nullable and no order requires one: a dessert cart takes guests, and a
+/// POS that demands a phone number before it will sell a waffle is a POS nobody uses.
+/// Kept as its own table rather than columns on the order so a regular is one row.
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+
+  name  String?
+  phone String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orders SalesOrder[]
+
+  /// Phone is the practical identity, and it is a PARTIAL unique index on live rows —
+  /// hand-written in the migration, and only applied when a phone is actually given.
+  @@index([phone])
+  @@index([deletedAt])
+  @@map("customers")
+}
+
+enum OrderStatus {
+  /// Being built at the counter. Not yet money.
+  DRAFT
+  /// Totalled and awaiting the customer paying.
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+}
+
+/// How a discount was expressed when it was given.
+///
+/// Stored alongside the resolved amount because "10% off" and "₹30 off" are the same
+/// number on a ₹300 order and different decisions — and only the first one tells you what
+/// the staff member actually keyed in.
+enum DiscountType {
+  NONE
+  FLAT
+  PERCENTAGE
+}
+
+/// One order taken at the counter.
+///
+/// Every money figure here is computed by the server from the line snapshots. Nothing in
+/// this table is ever taken from the client: a POS that trusts a browser-supplied total is
+/// a POS that can be talked into any total.
+model SalesOrder {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// `PB-20260728-0001`. Unique, human-readable, and restarting at 1 each day so staff can
+  /// say "order forty-two" without a six-digit number. Allocated by `order_sequences`.
+  orderNumber String @unique @map("order_number")
+
+  /// Client-supplied key that makes `POST /pos/orders` safe to send twice.
+  ///
+  /// The counter runs on mobile data. A request can be answered by the server and then lost
+  /// on the way back — the order exists, the till shows a network error, and the obvious
+  /// reaction is to tap Charge again. Without this the customer is billed twice and the day's
+  /// figures are wrong; the unique index is what makes the second attempt return the first
+  /// order instead of creating a new one.
+  ///
+  /// Nullable because orders created by anything other than the POS (a seed, a future import)
+  /// have no attempt to deduplicate, and because `NULL` repeats freely under a unique index
+  /// in Postgres — exactly the behaviour wanted here.
+  idempotencyKey String? @unique @map("idempotency_key")
+
+  /// Reuses the enum the daily-sales module already defines, so adding Zomato later is a
+  /// value in one place rather than a second channel concept.
+  channel SalesChannel @default(WALK_IN)
+  status  OrderStatus  @default(DRAFT)
+
+  customerId String?   @map("customer_id") @db.Uuid
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  /// Sum of the line totals, before discount.
+  subtotal Decimal @db.Decimal(12, 2)
+
+  discountType   DiscountType @default(NONE) @map("discount_type")
+  /// The percentage or flat figure as entered, kept for the audit trail.
+  discountValue  Decimal      @default(0) @map("discount_value") @db.Decimal(10, 2)
+  /// What the discount actually came to in rupees.
+  discountAmount Decimal      @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  /// Required by the use case whenever a discount is given. A reduction with no stated
+  /// reason is indistinguishable from a staff member undercharging a friend.
+  discountReason String?      @map("discount_reason")
+
+  /// `subtotal - discountAmount`. Stored because every list and tile wants it.
+  grandTotal Decimal @map("grand_total") @db.Decimal(12, 2)
+
+  /// Free text from the counter: "extra chocolate", "no oreo", "birthday order".
+  notes String?
+
+  placedById String? @map("placed_by_id") @db.Uuid
+  placedBy   User?   @relation("SalesOrderPlacedBy", fields: [placedById], references: [id], onDelete: SetNull)
+
+  /// Set when the order is paid, so "how long did that take" is answerable without
+  /// subtracting timestamps from a payment row.
+  paidAt DateTime? @map("paid_at")
+
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelledById   String?   @map("cancelled_by_id") @db.Uuid
+  cancelledBy     User?     @relation("SalesOrderCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  /// Required when cancelling — the same reasoning as the discount reason.
+  cancelReason    String?   @map("cancel_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items    SalesOrderItem[]
+  payments Payment[]
+
+  /// Serves the "today's orders" list, which is the query the POS runs most.
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([channel, createdAt])
+  @@map("sales_orders")
+}
+
+/// One line on an order.
+///
+/// `productName` and `unitPrice` are **snapshots** taken at the moment of sale. Reading the
+/// price through the product relation instead would silently rewrite history the first time
+/// the menu was repriced, and every past order would quietly disagree with its own total.
+model SalesOrderItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String     @map("order_id") @db.Uuid
+  order   SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// `Restrict`, like every other line table here: removing a product must not erase the
+  /// record of having sold it.
+  productId String  @map("product_id") @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// Snapshots, deliberately duplicated from `products`.
+  productName String  @map("product_name")
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+
+  quantity  Int     @default(1)
+  /// `unitPrice * quantity`, stored so a line reads correctly without recomputation.
+  lineTotal Decimal @map("line_total") @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// One line per product per order — tapping a card twice raises the quantity rather
+  /// than adding a second line, the same rule every other line table here follows.
+  @@unique([orderId, productId])
+  @@index([productId])
+  @@map("sales_order_items")
+}
+
+/// Money actually received against an order.
+///
+/// Its own table rather than columns on the order, because a split payment — half cash,
+/// half UPI — is a normal thing to want next, and that needs rows.
+///
+/// There is no gateway. UPI shows a static QR and a person confirms the money arrived, so
+/// `confirmedById` is who said so; that is the only assurance this records and it should
+/// not be mistaken for a settlement.
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String     @map("order_id") @db.Uuid
+  order   SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  amount Decimal       @db.Decimal(12, 2)
+
+  /// Free text for a UPI reference the staff member reads off the customer's phone.
+  reference String?
+
+  confirmedById String? @map("confirmed_by_id") @db.Uuid
+  confirmedBy   User?   @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([method, createdAt])
+  @@map("payments")
+}
+
+/// Per-day counter behind the order number.
+///
+/// A row per trading day, incremented atomically inside the order transaction. The obvious
+/// alternative — `SELECT count(*) + 1 FROM sales_orders WHERE created_at::date = today` —
+/// hands the same number to two tills taking an order in the same instant, and the unique
+/// index then fails one of them at the counter with a queue waiting.
+model OrderSequence {
+  /// The trading day this counter belongs to.
+  day DateTime @id @db.Date
+
+  /// Last number issued. The next order takes `lastNumber + 1`.
+  lastNumber Int @default(0) @map("last_number")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("order_sequences")
+}
+
+// ----------------------------------------------------------------------------
+// Remaining inventory domain — NOT YET IMPLEMENTED
+//
+// Reserved for a later phase. Planned aggregates and the invariants they own:
+//
+//   Category        self-referencing tree for product grouping
+//   Product         SKU master; unit of measure, cost, reorder threshold
+//   StockItem       on-hand quantity per (product, location)
+//   StockMovement   append-only ledger: IN / OUT / ADJUSTMENT / WASTAGE.
+//                   Quantities are derived by summing this ledger rather than
+//                   mutating a counter, so history is always reconstructable.
+//   PurchaseOrder   + PurchaseOrderLine, supplier replenishment
+//
+// Each gets its own repository interface in src/core/domain/repositories/ and a
+// Prisma implementation in src/infrastructure/database/repositories/.
+// ----------------------------------------------------------------------------

@@ -1,0 +1,1043 @@
+// ============================================================================
+// Angular Material theme and global element styles.
+//
+// Tailwind lives in src/styles/tailwind.css and is listed separately in
+// angular.json — see the comment at the top of that file for why the two are
+// not combined into one entry point.
+// ============================================================================
+
+@use '@angular/material' as mat;
+
+html {
+  // Emits the full Material 3 system token set as CSS custom properties, which
+  // is what the @theme block in tailwind.css maps onto so that Tailwind colour
+  // utilities and Material components share one palette.
+  //
+  // `color-scheme: light dark` makes those tokens resolve through `light-dark()`,
+  // so a single include themes both modes; ThemeService flips
+  // `document.documentElement.style.colorScheme` to pick between them.
+  @include mat.theme(
+    (
+      // The source palette still generates Material's *structure* — every role
+      // name, the typography scale, the density metrics. Its **colours are all
+      // overridden** immediately below, so which palette this is no longer
+      // decides how anything looks. See the bridge block for why.
+      color: mat.$rose-palette,
+      typography: (
+        plain-family: (
+          Inter,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif,
+        ),
+        brand-family: (
+          Inter,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif,
+        )
+      ),
+      density: 0
+    )
+  );
+
+  color-scheme: light dark;
+
+  /*
+   * Touch-target floor for the controls Material sizes below it.
+   *
+   * The POS is used on a phone with one hand, so 48px is the target and 44px the hard minimum.
+   * Two Material defaults sit under that at density 0 and were measured doing so on every screen
+   * that uses them: the button-toggle groups behind the period selectors on Analytics, Reports and
+   * Notifications, and the checkbox in the inventory and consumption tables.
+   *
+   * Set as tokens rather than by overriding the components' internals, so the change survives a
+   * Material upgrade instead of breaking quietly when a class name moves.
+   */
+  --mat-button-toggle-height: 48px;
+  --mat-checkbox-state-layer-size: 48px;
+  --mat-checkbox-touch-target-size: 48px;
+}
+
+// ---------------------------------------------------------------------------
+// The bridge: Material's colour roles, re-pointed at the design system
+// ---------------------------------------------------------------------------
+//
+// This block is why the redesign did not require touching a single page.
+//
+// Sixty-one component files already paint themselves with `bg-surface`,
+// `text-on-surface-variant`, `border-outline-variant` and friends — 292 uses of
+// `on-surface` alone. Those resolve to Material's `--mat-sys-*` roles, and the
+// roles were being generated algorithmically from `$rose-palette`. That is where
+// the beige came from: an M3 palette tints **every** surface with the source
+// hue, so the page was `#fff8f8` and the hairlines were `#f5dade`. Nobody chose
+// those; a colour algorithm did, and it is the single reason the app read as a
+// themed template rather than as a product.
+//
+// So the roles are redefined here as aliases onto the semantic layer. Material's
+// own components — buttons, form fields, menus, checkboxes, snackbars — read the
+// same roles internally, which means they are re-themed by the same forty lines
+// rather than by a per-component override sheet.
+//
+// ## Why override the roles instead of generating a palette from the brand
+//
+// `mat.theme()` can build a palette from a source colour, and doing that with
+// `#3b2416` was tried first. It produces exactly the problem being fixed: an M3
+// palette derived from chocolate tints its neutrals *brown*, so the page comes
+// out beige again, just a different beige. The brief asks for `#fafafb` and
+// `#ffffff` specifically — a neutral ground with the brand rationed on top of it
+// — and that is not a shape the M3 algorithm can express.
+//
+// ## Placement, and why these win
+//
+// Unlayered, on `html`, after `mat.theme()`. Material emits its own declarations
+// unlayered on `html` too, so this is a plain source-order win at equal
+// specificity. Tailwind's `@theme` output sits in `layer(theme)` and loses to
+// both, which is what lets the design system declare `--color-pb-*` freely
+// without fighting anything here.
+//
+// ## Reading this block
+//
+// Left is Material's vocabulary, right is ours. Where the two disagree about
+// what a role means, the comment says so — those are the places a future
+// Material upgrade could surprise someone.
+html {
+  // ---- Surfaces ----
+  //
+  // `surface` is white rather than the page colour, because the app uses
+  // `bg-surface` for its *cards and chrome* — the topbar, the sidebar, the
+  // sign-in card, the sticky form footer. The page itself is painted by `body`
+  // below, from `--color-pb-page`. Getting this backwards turns every card grey
+  // and leaves the page white, which is the inverse of the brief.
+  --mat-sys-surface: var(--color-pb-surface);
+  --mat-sys-surface-container-lowest: var(--color-pb-surface);
+  --mat-sys-surface-container-low: var(--color-pb-surface); // pb-card, command palette
+  --mat-sys-surface-container: var(--color-pb-surface-sunken); // wells *inside* a card
+  --mat-sys-surface-container-high: var(--color-pb-surface-sunken);
+  --mat-sys-surface-container-highest: var(--color-pb-surface-sunken);
+  --mat-sys-surface-bright: var(--color-pb-surface);
+  --mat-sys-surface-dim: var(--color-pb-surface-sunken);
+  --mat-sys-surface-variant: var(--color-pb-surface-sunken);
+  --mat-sys-background: var(--color-pb-page);
+  --mat-sys-on-background: var(--color-pb-text);
+
+  // M3 tints elevated surfaces with this colour to imply height. This system
+  // implies height with a border instead, so the tint is pointed at the surface
+  // it would tint — making the overlay a no-op rather than leaving a stray brown
+  // wash on every raised panel.
+  --mat-sys-surface-tint: var(--color-pb-surface);
+
+  // ---- Text ----
+  --mat-sys-on-surface: var(--color-pb-text);
+  --mat-sys-on-surface-variant: var(--color-pb-text-secondary);
+
+  // ---- Borders ----
+  //
+  // Reversed from M3's own emphasis order on purpose. Material treats `outline`
+  // as the strong one and `outline-variant` as the hairline, and this app
+  // follows that: 68 uses of `border-outline-variant` are card edges, 71 of
+  // `border-outline` are the emphasised ones.
+  --mat-sys-outline-variant: var(--color-pb-border);
+  --mat-sys-outline: var(--color-pb-border-strong);
+
+  // ---- Primary: the chocolate ----
+  //
+  // Material paints filled buttons, checkboxes, radios, sliders, tab indicators
+  // and progress bars from this role. All of those are "an important action" or
+  // "a committed state", which is exactly the brief's list for the brown.
+  --mat-sys-primary: var(--color-pb-primary);
+  --mat-sys-on-primary: var(--color-pb-on-primary);
+  --mat-sys-primary-container: var(--color-pb-primary-tint-strong);
+  --mat-sys-on-primary-container: var(--color-pb-text);
+  --mat-sys-primary-fixed: var(--color-pb-primary-tint-strong);
+  --mat-sys-primary-fixed-dim: var(--color-pb-primary-tint-border);
+  --mat-sys-on-primary-fixed: var(--color-pb-text);
+  --mat-sys-on-primary-fixed-variant: var(--color-pb-text-secondary);
+  --mat-sys-inverse-primary: var(--color-pb-primary-tint-strong);
+
+  // ---- Secondary: quiet neutral, not a second brand colour ----
+  //
+  // M3 expects a secondary hue. This system does not have one — it has a brand,
+  // an interaction colour and a set of status tones, and inventing a fourth
+  // would give screens a way to be colourful without meaning anything.
+  --mat-sys-secondary: var(--color-pb-text-secondary);
+  --mat-sys-on-secondary: var(--color-pb-text-inverse);
+  --mat-sys-secondary-container: var(--color-pb-surface-sunken);
+  --mat-sys-on-secondary-container: var(--color-pb-text);
+  --mat-sys-secondary-fixed: var(--color-pb-surface-sunken);
+  --mat-sys-secondary-fixed-dim: var(--color-pb-border);
+  --mat-sys-on-secondary-fixed: var(--color-pb-text);
+  --mat-sys-on-secondary-fixed-variant: var(--color-pb-text-secondary);
+
+  // ---- Tertiary: the interaction pink ----
+  //
+  // Material uses `tertiary` for accents that are neither the primary action nor
+  // an error — which is the pink's job. Selected chips, the sort arrow, the
+  // active tab underline in some components.
+  --mat-sys-tertiary: var(--color-pb-interactive);
+  --mat-sys-on-tertiary: var(--color-pb-text-inverse);
+  --mat-sys-tertiary-container: var(--color-pb-selected-surface);
+  --mat-sys-on-tertiary-container: var(--color-pb-link);
+  --mat-sys-tertiary-fixed: var(--color-pb-selected-surface);
+  --mat-sys-tertiary-fixed-dim: var(--color-pb-selected-border);
+  --mat-sys-on-tertiary-fixed: var(--color-pb-link);
+  --mat-sys-on-tertiary-fixed-variant: var(--color-pb-link);
+
+  // ---- Error: the danger tone ----
+  //
+  // Previously this was the rose palette's red, which sat close enough to the
+  // brand pink that a validation message read as emphasis rather than as a
+  // problem. It is now the semantic danger red, which cannot be confused with
+  // anything else on the page.
+  --mat-sys-error: var(--color-pb-danger-base);
+  --mat-sys-on-error: var(--color-pb-text-inverse);
+  --mat-sys-error-container: var(--color-pb-danger-surface);
+  --mat-sys-on-error-container: var(--color-pb-danger-fg);
+
+  // ---- Inverse: the snackbar, and anything deliberately opposite ----
+  --mat-sys-inverse-surface: var(--color-pb-inverse-surface);
+  --mat-sys-inverse-on-surface: var(--color-pb-inverse-text);
+
+  // ---- Scrim and shadow ----
+  --mat-sys-scrim: var(--color-pb-scrim);
+  --mat-sys-shadow: #000;
+
+  // Internal steps a few Material components reach for directly.
+  --mat-sys-neutral10: var(--color-pb-text);
+  --mat-sys-neutral-variant20: var(--color-pb-text);
+
+  // ---- Focus, as pink ----
+  //
+  // Material derives a focused form field's outline and floating label from
+  // `primary`, which would make focus chocolate. The brief puts focus in the
+  // pink column, and it is right to: focus is transient interaction feedback,
+  // and the brown is reserved for committed state. These are the two tokens
+  // that decide it for every `mat-form-field` in the app.
+  --mdc-outlined-text-field-focus-outline-color: var(--color-pb-interactive);
+  --mdc-outlined-text-field-focus-label-text-color: var(--color-pb-link);
+  --mdc-filled-text-field-focus-active-indicator-color: var(--color-pb-interactive);
+  --mdc-filled-text-field-focus-label-text-color: var(--color-pb-link);
+}
+
+// ---------------------------------------------------------------------------
+// Brand-fixed surfaces
+// ---------------------------------------------------------------------------
+
+// The POS paints its cards, cart and payment sheet in a fixed brand surface in
+// **both** themes, because a counter screen should look like the shop rather
+// than like the operating system. (That surface is now white rather than cream —
+// see `--color-pos-vanilla` in tailwind.css.)
+//
+// That is a problem for everything *inside* those surfaces: in dark mode the body
+// text, the input labels and the form-field outlines all resolve to their
+// light-on-dark values and land on a white card, where they are somewhere
+// between faint and invisible. Product names on the order grid were the visible
+// symptom; the collapsed notes and discount fields were the same bug waiting to
+// be opened.
+//
+// **This used to be one line — `color-scheme: light` — and it no longer can be.**
+// That worked because every token was a `light-dark()` pair, which resolves off
+// `color-scheme`. The redesign declares plain per-mode values instead, for a
+// reason worth the cost here: a `light-dark()` custom property read back through
+// `getComputedStyle` returns the literal string `light-dark(#a, #b)` rather than
+// a colour, so *any* code inspecting a token silently gets nonsense. That is
+// already documented in `chart.component.ts`, which carries a probe element
+// specifically to work around it, and it is why an earlier chart palette helper
+// became a no-op and drew three donut slices in one colour.
+//
+// So the light values are re-asserted explicitly below. It is duplication, and
+// it is the smaller problem: a declaration on this element beats the inherited
+// dark value regardless of specificity or source order, so the mechanism is
+// simple and cannot be broken by a later rule.
+//
+// **Adding a semantic colour token means adding it here too** if it can appear
+// inside a POS surface. The failure is quiet — light text on a white card — so it
+// will not show up in a build.
+.pos-light-surface {
+  color-scheme: light;
+
+  --color-pb-surface: var(--pb-neutral-0);
+  --color-pb-surface-raised: var(--pb-neutral-0);
+  --color-pb-surface-sunken: var(--pb-neutral-50);
+
+  --color-pb-text: var(--pb-neutral-900);
+  --color-pb-text-secondary: var(--pb-neutral-600);
+  --color-pb-text-muted: var(--pb-neutral-500);
+  --color-pb-text-disabled: var(--pb-neutral-400);
+  --color-pb-text-inverse: var(--pb-neutral-0);
+
+  --color-pb-border-subtle: var(--pb-neutral-150);
+  --color-pb-border: var(--pb-neutral-200);
+  --color-pb-border-strong: var(--pb-neutral-300);
+
+  --color-pb-primary: var(--pb-brown-800);
+  --color-pb-primary-hover: var(--pb-brown-600);
+  --color-pb-primary-pressed: var(--pb-brown-900);
+  --color-pb-on-primary: var(--pb-neutral-0);
+  --color-pb-primary-tint: var(--pb-brown-50);
+  --color-pb-primary-tint-strong: var(--pb-brown-100);
+  --color-pb-primary-tint-border: var(--pb-brown-200);
+
+  --color-pb-gold-fg: var(--pb-gold-600);
+  --color-pb-link: var(--pb-pink-700);
+  --color-pb-hover-surface: var(--pb-pink-50);
+  --color-pb-selected-surface: var(--pb-pink-100);
+  --color-pb-selected-border: var(--pb-pink-200);
+
+  --color-pb-neutral-surface: var(--pb-neutral-50);
+  --color-pb-neutral-border: var(--pb-neutral-200);
+  --color-pb-neutral-fg: var(--pb-neutral-600);
+
+  --color-pb-success-surface: var(--pb-success-50);
+  --color-pb-success-border: var(--pb-success-200);
+  --color-pb-success-fg: var(--pb-success-700);
+  --color-pb-warning-surface: var(--pb-warning-50);
+  --color-pb-warning-border: var(--pb-warning-200);
+  --color-pb-warning-fg: var(--pb-warning-700);
+  --color-pb-danger-surface: var(--pb-danger-50);
+  --color-pb-danger-border: var(--pb-danger-200);
+  --color-pb-danger-fg: var(--pb-danger-700);
+  --color-pb-info-surface: var(--pb-info-50);
+  --color-pb-info-border: var(--pb-info-200);
+  --color-pb-info-fg: var(--pb-info-700);
+
+  // The Material roles beneath, so components rendered inside a POS surface —
+  // form fields, buttons, menus — agree with the white they sit on.
+  --mat-sys-surface: var(--pb-neutral-0);
+  --mat-sys-surface-container-lowest: var(--pb-neutral-0);
+  --mat-sys-surface-container-low: var(--pb-neutral-0);
+  --mat-sys-surface-container: var(--pb-neutral-50);
+  --mat-sys-surface-container-high: var(--pb-neutral-50);
+  --mat-sys-surface-container-highest: var(--pb-neutral-50);
+  --mat-sys-on-surface: var(--pb-neutral-900);
+  --mat-sys-on-surface-variant: var(--pb-neutral-600);
+  --mat-sys-outline-variant: var(--pb-neutral-200);
+  --mat-sys-outline: var(--pb-neutral-300);
+  --mat-sys-primary: var(--pb-brown-800);
+  --mat-sys-on-primary: var(--pb-neutral-0);
+}
+
+// ---------------------------------------------------------------------------
+// Chart legends
+// ---------------------------------------------------------------------------
+
+// ApexCharts legend entries toggle their series, so they are controls — and they render about
+// 15px tall, which is a third of the minimum touch target and was measured that way on the
+// dashboard, Analytics and Reports.
+//
+// Styled here rather than through chart options because ApexCharts exposes only `fontSize` and
+// `itemMargin` for this, and margin does not make the *element* tappable; it only pushes its
+// neighbours away. The min-height is what a finger actually lands on. `itemMargin` is raised
+// alongside this in chart.component.ts so adjacent series stay distinguishable.
+.apexcharts-legend-series {
+  display: inline-flex !important;
+  align-items: center;
+  min-height: 44px;
+}
+
+// ---------------------------------------------------------------------------
+// Base element styles
+//
+// Minimal by design: Tailwind's preflight is not loaded (see tailwind.css), so
+// the few resets it would otherwise provide are declared here explicitly.
+// ---------------------------------------------------------------------------
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+// The page ground, and the one element that must *not* use `--mat-sys-surface`.
+//
+// `surface` is white, because that is what the app's cards and chrome paint
+// themselves with. The page behind them is `#fafafb` — two percent darker, which
+// is a smaller gap than it sounds and is enough, because the eye reads the
+// card's border first and its tone second. A bigger gap gives you a grey page
+// that looks unfinished; no gap at all gives you floating borders with nothing
+// behind them.
+body {
+  background-color: var(--color-pb-page);
+  color: var(--color-pb-text);
+  font-family: var(--mat-sys-body-medium-font, Inter, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Text selection, in the interaction colour.
+//
+// The browser default is a flat blue that belongs to no design system and is the
+// kind of detail that separates an app someone shipped from an app someone
+// finished. Pink at 22% keeps the selected text readable — a solid fill would
+// force a matching foreground colour and break on every tinted surface.
+::selection {
+  background-color: color-mix(in srgb, var(--color-pb-interactive) 22%, transparent);
+}
+
+// Respect a user's reduced-motion preference across Material and Tailwind alike.
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// Keyboard focus must remain visible; :focus-visible avoids showing it on click.
+//
+// Pink rather than the brand brown, and that is a deliberate reading of the
+// brief: focus is *transient* — it says "the keyboard is here right now" — while
+// the brown marks state that persists. A chocolate focus ring on a chocolate
+// button is also nearly invisible, which is the practical half of the argument.
+//
+// `#ff4d8d` measures 3.1:1 on white, clearing the 3:1 WCAG 2.1 requires of a
+// focus indicator. The offset is what keeps it clear of the control's own edge;
+// without it the ring merges into a dark button and stops reading as a ring.
+//
+// ## Why this is in `@layer base` and nothing else here is
+//
+// It is a **default**, and a default has to be overridable. Unlayered — which is
+// what it was — it beat every component that draws its own focus treatment,
+// including Tailwind's own `outline-none` and the `pb-input` utility, because
+// unlayered rules outrank every layer regardless of specificity.
+//
+// The visible symptom was two rings: the topbar search drew the design system's
+// pink ring around its 40px pill *and* a square outline hugging the bare
+// `<input>` inside it, with mismatched corners. The command palette did the same.
+// Both had asked for `outline-none` and both were overruled.
+//
+// In `base`, the cascade says what it should: this is what focus looks like
+// unless a control has something better, and `layer(utilities)` — where every
+// `@utility` and Tailwind class lands — wins when it does.
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-pb-interactive);
+    outline-offset: 2px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Application-specific classes
+//
+// These exist because they are applied by name from TypeScript (routerLinkActive,
+// snackbar panelClass, dialog variants) and so cannot live in a component's
+// scoped styles.
+// ---------------------------------------------------------------------------
+
+// Active navigation item in the sidebar, set by routerLinkActive.
+//
+// Three signals, deliberately redundant: a tinted pill, an accent bar on the leading edge, and a
+// *filled* icon. Redundancy is the point — in the collapsed rail the pill is one square among
+// squares, and the fill is what identifies the current section when the label is not there to read.
+// It also means the state survives for anyone who cannot separate the tint from the panel behind it.
+//
+// `secondary-container` was the previous fill and read as a heavy block on a narrow column; this is
+// a lighter tint of the primary, closer to how Linear and Vercel mark the current item.
+//
+// These rules are unlayered while Tailwind's utilities sit in `@layer utilities`, so they win over
+// the `hover:` and `group-hover:` classes on the same elements regardless of specificity. That is
+// what stops the current item flickering to the hover tint as the cursor crosses it.
+//
+// Brown, not pink: the current section is the definition of a *committed* state,
+// and it is the brief's "Navigation" and "Selected Items" in one element. The
+// pink hover wash still plays underneath it as the cursor passes, so the two
+// read as what they are — where you are, and where you might go.
+.pb-nav-active {
+  background-color: var(--color-pb-primary-tint-strong);
+  color: var(--color-pb-text);
+  font-weight: 550;
+
+  &:hover {
+    background-color: var(--color-pb-primary-tint-border);
+  }
+
+  .pb-nav-icon {
+    color: var(--color-pb-primary);
+    // The `FILL` axis of the variable icon font — see `pb-icon-filled` in design-system.css for
+    // why this is an axis rather than a second icon name.
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 500;
+  }
+
+  // Full opacity and full length here; the component's class list previews the bar at 40% under the
+  // pointer, so hovering hints at the marker and being current commits it.
+  //
+  // Height rather than a `scaleY`, because the element is centred with Tailwind's `-translate-y-1/2`
+  // and in Tailwind v4 `translate` and `scale` are separate CSS properties — setting `transform`
+  // here would silently drop the centring. Growing the height keeps the centring exact, since the
+  // translation is always half of whatever the current height is.
+  .pb-nav-indicator {
+    opacity: 1;
+    height: 1.25rem;
+  }
+}
+
+// Shell dropdowns — quick actions, the account menu, the notification panel.
+//
+// Applied by name through `mat-menu`'s `class` input, which puts the panel in an overlay outside
+// this component tree, so a scoped style cannot reach it.
+//
+// Material's menu is a plain elevated surface. These give it the system's radius and hairline
+// elevation, and a border — which is what stops a dark panel dissolving into a dark page, since a
+// shadow alone is nearly invisible there.
+.pb-shell-menu {
+  --mat-menu-container-shape: var(--radius-pb-lg);
+
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--radius-pb-lg);
+  box-shadow: var(--shadow-pb-md) !important;
+  overflow: hidden;
+
+  .mat-mdc-menu-item {
+    min-height: 40px;
+    border-radius: var(--radius-pb-md);
+    margin-inline: 0.375rem;
+    // Narrower than the row so the hover fill reads as a pill inside the panel rather than a
+    // full-bleed band, which is the difference between a menu that looks designed and one that
+    // looks default.
+    width: calc(100% - 0.75rem);
+    transition: background-color var(--duration-pb-instant) var(--ease-pb-in-out);
+  }
+
+  .mat-mdc-menu-item .mat-icon {
+    color: var(--mat-sys-on-surface-variant);
+    margin-right: 0.625rem;
+  }
+
+  // Material pads the panel 8px top and bottom. A menu whose first child is a full-bleed header
+  // needs that gone, or the header floats with a sliver of panel above it.
+  .mat-mdc-menu-content {
+    padding-block: 0.375rem;
+  }
+}
+
+// The notification panel: a shell menu that is also a *list*, and so needs a width and a ceiling.
+//
+// Material sizes a menu to its widest item. The entries here wrap body text, so left alone the
+// panel grows to whatever the longest unbroken run of characters demands — in practice the whole
+// viewport. Both dimensions are therefore pinned:
+//
+// - width, so every entry wraps at a readable measure rather than the panel resizing per item;
+// - height, so a busy inbox scrolls inside the panel instead of running off the bottom of the
+//   screen and taking "Mark all read" and "View all" with it.
+//
+// In styles.scss rather than the component's `styles` block because a menu panel renders in an
+// overlay at the document root, outside the component tree — the previous `::ng-deep` rule reached
+// it only because `::ng-deep` leaks globally, which is the deprecated version of putting it here.
+.pb-notification-menu {
+  --mat-menu-container-shape: var(--radius-pb-lg);
+
+  width: min(24rem, calc(100vw - 2rem));
+  max-width: min(24rem, calc(100vw - 2rem)) !important;
+
+  .mat-mdc-menu-content {
+    // 0 so the sticky header and the footer link sit flush against the panel's own edges.
+    padding-block: 0;
+    max-height: min(32rem, calc(100vh - 6rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  // Full-bleed rows, unlike the inset pills of the other shell menus. An entry here is three lines
+  // of wrapped text with a leading tile; inset by 6px a side it reads as a floating card, and a
+  // column of floating cards is much harder to scan than a divided list.
+  .mat-mdc-menu-item {
+    margin-inline: 0;
+    width: 100%;
+    border-radius: 0;
+  }
+
+  // The header and footer pin to the panel's edges, so "Mark all read" and "View all" stay reachable
+  // once ten entries are scrolling between them. `position: sticky` resolves against the nearest
+  // scrolling ancestor, which is `.mat-mdc-menu-content` above.
+  //
+  // Nested rather than declared as top-level classes because the footer is itself a
+  // `.mat-mdc-menu-item`, and Material sets `position: relative` on those. Both rules are unlayered
+  // and both are a single class, so specificity ties and source order decides — which meant Material
+  // won and the footer scrolled away. The descendant selector settles it.
+  .pb-menu-sticky-header,
+  .pb-menu-sticky-footer {
+    position: sticky;
+    z-index: 2;
+    background-color: var(--mat-sys-surface-container);
+  }
+
+  .pb-menu-sticky-header {
+    top: 0;
+  }
+
+  .pb-menu-sticky-footer {
+    bottom: 0;
+  }
+}
+
+// Sign out, inside a shell menu. Tints toward danger only on hover, so the menu is not shouting at
+// rest — the item is a normal choice until you are actually about to take it.
+.pb-menu-danger:hover {
+  background-color: var(--color-pb-danger-surface) !important;
+  color: var(--color-pb-danger-fg);
+
+  .mat-icon {
+    color: var(--color-pb-danger-fg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Data table
+//
+// Applied by name from `pb-data-table`, and here rather than in that component's `styles` block
+// because Material renders `mat-table` rows through its own templates: the `<th>` and `<td>` it
+// creates are not in the component's own DOM scope, so a scoped rule would need `::ng-deep` to
+// reach them — which is the deprecated spelling of putting the rule here.
+// ---------------------------------------------------------------------------
+
+.pb-table {
+  // Row height and cell padding, driven by one variable per density so a single class on the
+  // wrapper moves everything together. Values are set by `.pb-table-compact` /
+  // `.pb-table-comfortable` below.
+  // Roomier than before at both densities. 52px was Material's own figure and reads tight against
+  // 14px text with a badge in the row; 56 gives a line of body text its full leading plus 16px of
+  // air, which is the spacing Linear and Stripe use for a scannable list.
+  --pb-row-h: 56px;
+  --pb-cell-py: 0.875rem;
+
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+
+  .mat-mdc-header-row {
+    height: auto;
+  }
+
+  // The header, in the Notion/Linear idiom: a quiet label strip rather than a banded row.
+  //
+  // Uppercase at 11px with wide tracking, in secondary ink — it names the columns and then gets out
+  // of the way. The band is `surface-sunken` rather than a tint of the brand, so it reads as the
+  // table's own chrome instead of as the first row of data.
+  //
+  // Its own surface, not transparent: the header is what the sticky rule pins, and a transparent
+  // sticky header lets rows scroll visibly *underneath* the labels.
+  .mat-mdc-header-cell {
+    padding: 0.75rem;
+    font-size: var(--text-pb-overline);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-pb-text-secondary);
+    background-color: var(--color-pb-surface-sunken);
+    border-bottom: 1px solid var(--color-pb-border);
+    white-space: nowrap;
+  }
+
+  .mat-mdc-row {
+    height: var(--pb-row-h);
+    transition: background-color var(--duration-pb-instant) var(--ease-pb-in-out);
+  }
+
+  .mat-mdc-cell {
+    padding: var(--pb-cell-py) 0.75rem;
+    font-size: var(--text-pb-body);
+    color: var(--color-pb-text);
+    // Hairline, and lighter than the header's: the row rules are there to guide the eye across a
+    // wide row, not to draw a grid. Vertical rules are deliberately absent for the same reason.
+    border-bottom: 1px solid var(--color-pb-border-subtle);
+  }
+
+  // The last row's rule is the container's own border repeated one pixel away — two lines where the
+  // table ends, which is the detail that makes a bordered table look boxed rather than finished.
+  .mat-mdc-row:last-of-type .mat-mdc-cell {
+    border-bottom: 0;
+  }
+
+  // Hover, on every table rather than only the clickable ones. On a row 8 columns wide the tint is
+  // what keeps your eye on one record while it crosses the width — that is true whether or not the
+  // row does something when clicked.
+  //
+  // Pink, and this is the change that does most of the work against "dull": a grey-on-grey hover is
+  // the difference between a table that feels live and one that feels printed. It is also *only* a
+  // hover — the wash is light enough that a row under the cursor never reads as selected.
+  .mat-mdc-row:hover .mat-mdc-cell {
+    background-color: var(--color-pb-hover-surface);
+  }
+
+  // A focused row, now that rows are keyboard-operable.
+  //
+  // The ring is drawn with an inset shadow on the *cells* rather than an outline on the row: a
+  // `<tr>` cannot be outlined reliably — the border-collapse model clips it and browsers disagree
+  // about where it lands — while an inset shadow on each cell composes into one continuous band
+  // across the row's full width.
+  //
+  // Pink, like every other focus indicator in the app, and paired with the selection wash so a
+  // focused row is legible without relying on the ring alone.
+  .mat-mdc-row:focus-visible {
+    outline: none;
+  }
+
+  .mat-mdc-row:focus-visible .mat-mdc-cell {
+    background-color: var(--color-pb-selected-surface);
+    box-shadow:
+      inset 0 2px 0 0 var(--color-pb-interactive),
+      inset 0 -2px 0 0 var(--color-pb-interactive);
+  }
+
+  // The leading and trailing cells close the band at the row's ends, so it reads as a ring around
+  // the row rather than as two horizontal rules.
+  .mat-mdc-row:focus-visible .mat-mdc-cell:first-child {
+    box-shadow:
+      inset 0 2px 0 0 var(--color-pb-interactive),
+      inset 0 -2px 0 0 var(--color-pb-interactive),
+      inset 2px 0 0 0 var(--color-pb-interactive);
+  }
+
+  .mat-mdc-row:focus-visible .mat-mdc-cell:last-child {
+    box-shadow:
+      inset 0 2px 0 0 var(--color-pb-interactive),
+      inset 0 -2px 0 0 var(--color-pb-interactive),
+      inset -2px 0 0 0 var(--color-pb-interactive);
+  }
+}
+
+// Striping, as a *very* light wash on the cell rather than the row.
+//
+// On the cell because the hover and selected rules above also paint cells, so all three compose
+// predictably instead of fighting over which element owns the background.
+//
+// 2.5% is deliberately near-invisible in isolation. Striping earns its place by making a long row
+// traceable across the width; any stronger and it becomes a pattern the reader has to look past to
+// find the data, which is the usual reason striped tables look dated.
+.pb-table-striped .mat-mdc-row:nth-child(even) .mat-mdc-cell {
+  background-color: var(--color-pb-surface-sunken);
+}
+
+.pb-table-striped .mat-mdc-row:nth-child(even):hover .mat-mdc-cell {
+  background-color: var(--color-pb-hover-surface);
+}
+
+// A selected row outranks both stripe and hover: it is a state the user set, not one the pointer
+// happens to be creating.
+//
+// Brown, where hover is pink. That contrast is the whole selection model in one place — the
+// committed choice is the brand colour and survives, the pointer's wash is the interaction colour
+// and does not. Ticking a row you are hovering visibly changes it, which is the feedback that was
+// missing when both were a grey mix of the same foreground.
+.pb-table .mat-mdc-row.pb-row-selected .mat-mdc-cell,
+.pb-table-striped .mat-mdc-row.pb-row-selected .mat-mdc-cell,
+.pb-table .mat-mdc-row.pb-row-selected:hover .mat-mdc-cell {
+  background-color: var(--color-pb-primary-tint-strong);
+}
+
+// The mobile equivalent of a selected row. Same tint, so the two layouts agree about what
+// "selected" looks like, plus a border the card layout can actually show (a card has an edge; a
+// table row does not).
+.pb-card-selected {
+  border-color: var(--color-pb-primary-tint-border);
+  background-color: var(--color-pb-primary-tint);
+}
+
+// The selection cell is sized by its checkbox, not by the row's padding.
+//
+// `html` raises `--mat-checkbox-state-layer-size` to 48px as a touch-target floor for the POS. That
+// floor is right, and it was also silently deciding the height of every row in a selectable table:
+// 48px of checkbox plus 12px of cell padding top and bottom measured 73px, so "compact" produced
+// 61px and the density control barely did anything. Zeroing the block padding here lets the checkbox
+// be the tallest thing in the cell instead of adding to it.
+.pb-table .mat-mdc-header-cell:first-child:has(.mat-mdc-checkbox),
+.pb-table .mat-mdc-cell:first-child:has(.mat-mdc-checkbox) {
+  padding-block: 0;
+}
+
+.pb-table-comfortable {
+  --pb-row-h: 56px;
+  --pb-cell-py: 0.875rem;
+}
+
+.pb-table-compact {
+  --pb-row-h: 44px;
+  --pb-cell-py: 0.5rem;
+
+  // A 48px checkbox cannot fit a 40px row, so compact takes the target down to 32px.
+  //
+  // Still comfortably above the 24px WCAG 2.5.8 minimum for a pointer, which is the input compact
+  // mode is for — the density control is desktop-only, and comfortable mode keeps the full 48px for
+  // anyone on a touch screen. Compact is a choice a user makes with a mouse in their hand.
+  --mat-checkbox-state-layer-size: 32px;
+  --mat-checkbox-touch-target-size: 32px;
+}
+
+// Sticky header.
+//
+// `position: sticky` resolves against the nearest scrolling ancestor, which is the wrapper with
+// `overflow: auto` — not the page. That is why the wrapper needs a max-height for this to do
+// anything: with no height limit the wrapper never scrolls, and a header stuck to the top of a
+// container that never moves is just a header.
+//
+// The z-index keeps it above the cells it pins; without it the rows scroll over the labels.
+.pb-table-sticky .mat-mdc-header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+// Paginator, aligned with the rest of the table.
+//
+// Material's default paginator is 56px tall with 24px gutters and a full-size form field for the page
+// size — chrome roughly the height of two compact rows, sitting under every list in the app. These
+// tokens bring it down to the table's own scale. Applied by class rather than globally so a paginator
+// used somewhere other than a list keeps Material's defaults.
+.pb-paginator .mat-mdc-paginator-container {
+  --mat-paginator-container-size: 48px;
+
+  min-height: 48px;
+  padding-inline: 0.5rem;
+  // Material right-aligns the whole cluster; on a wide table that puts the row count and the arrows
+  // a long way from the data they describe. Spread instead, so the summary sits under the first
+  // column and the controls under the last.
+  justify-content: space-between;
+}
+
+// The paginator reads as the table's own footer rather than as a control floating beneath it: same
+// surface, same border, and the table's bottom corners squared off so the two are one object.
+.pb-paginator {
+  --mat-paginator-container-text-size: var(--text-pb-caption);
+  --mat-paginator-container-background-color: transparent;
+
+  border: 1px solid var(--color-pb-border);
+  border-top: 0;
+  border-end-start-radius: var(--radius-pb-lg);
+  border-end-end-radius: var(--radius-pb-lg);
+  background-color: var(--color-pb-surface-sunken);
+
+  .mat-mdc-paginator-page-size {
+    align-items: center;
+    margin-inline-end: 0.5rem;
+  }
+
+  .mat-mdc-paginator-page-size-label,
+  .mat-mdc-paginator-range-label {
+    font-size: var(--text-pb-caption);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // The range label carries digits that change as you page; tabular figures stop the whole cluster
+  // shifting sideways when "1 – 25 of 9" becomes "26 – 50 of 100".
+  .mat-mdc-paginator-range-label {
+    font-variant-numeric: tabular-nums;
+    margin-inline: 0.75rem;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Forms
+//
+// Global because Material renders form fields, select panels and dialog surfaces through its own
+// templates and overlays — a component's scoped styles cannot reach an overlay attached to the
+// document root, and `::ng-deep` is the deprecated spelling of putting the rule here.
+// ---------------------------------------------------------------------------
+
+// A cleaner select panel.
+//
+// Material's default is an 8px-radius sheet with 48px options and no border, which on a dark page has
+// no edge at all — the same problem the shell menus had. These give it the system's radius, a hairline,
+// and the inset hover pill the rest of the app's menus use.
+.mat-mdc-select-panel,
+.mat-mdc-autocomplete-panel {
+  --mat-select-container-elevation-shadow: var(--shadow-pb-md);
+
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--radius-pb-lg) !important;
+  box-shadow: var(--shadow-pb-md) !important;
+  padding-block: 0.375rem !important;
+
+  .mat-mdc-option {
+    min-height: 40px;
+    border-radius: var(--radius-pb-md);
+    margin-inline: 0.375rem;
+    width: calc(100% - 0.75rem);
+    font-size: var(--text-pb-body);
+  }
+
+  // The tick on the selected option is the brand pink; the *label* should not also be, or a long list
+  // of options reads as a list of links.
+  .mat-mdc-option.mdc-list-item--selected .mdc-list-item__primary-text {
+    font-weight: 550;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Filter controls in a list toolbar
+// ---------------------------------------------------------------------------
+//
+// Material's outlined field is 56px tall — right for a form, wrong for a filter bar sitting above a
+// table, where it makes the controls the heaviest thing on the screen before any data is read.
+//
+// 48px is the floor rather than 40: an outlined field's label sits *in* its border, and below about
+// 48 the floating label collides with the outline it notches. It is also the touch-target minimum,
+// which a filter on a tablet needs.
+//
+// Scoped to the toolbar so every form on every page is untouched — this is a filter-bar decision,
+// not a form-field one.
+pb-list-toolbar {
+  .mat-mdc-form-field {
+    --mat-form-field-container-height: 48px;
+    --mat-form-field-container-vertical-padding: 12px;
+    --mat-form-field-outlined-label-text-populated-size: var(--text-pb-caption);
+  }
+
+  // The subscript row reserves 22px under every field for a hint that filters never have.
+  .mat-mdc-form-field-subscript-wrapper {
+    display: none;
+  }
+}
+
+// Form-field chrome, aligned with the design system.
+//
+// Scoped to `.pb-form` rather than applied to every `mat-form-field` in the app: the list toolbars use
+// the same component as a filter control, where the denser subscript and the hint reservations here
+// would fight the layout they already have.
+.pb-form {
+  .mat-mdc-form-field {
+    // Material reserves a fixed 22px subscript row under every field for a hint or an error, whether
+    // or not one exists. On a form of eleven fields that is 240px of empty space, and it is why these
+    // forms needed 12px gaps to stay a sensible length — the gap was compensating for padding that was
+    // already there. `subscriptSizing="dynamic"` at the call site is the supported fix; this makes the
+    // reserved row tighter for the fields that do use it.
+    --mat-form-field-subscript-text-size: var(--text-pb-caption);
+    --mat-form-field-container-text-size: var(--text-pb-body);
+    --mat-form-field-outlined-label-text-size: var(--text-pb-body);
+  }
+
+  // The error text carries the semantic danger colour rather than Material's `error` role, which on
+  // this rose palette is a red close enough to the brand pink that a validation message reads as
+  // emphasis rather than as a problem.
+  .mat-mdc-form-field-error {
+    color: var(--color-pb-danger-fg);
+    font-size: var(--text-pb-caption);
+  }
+
+  .mat-mdc-form-field-hint {
+    font-size: var(--text-pb-caption);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // A native date input renders its own calendar button, and in Chrome that button is a 16px grey
+  // glyph jammed against the field's right edge with no padding. This gives it room and makes it
+  // follow the theme instead of the OS.
+  input[type='date'],
+  input[type='time'] {
+    &::-webkit-calendar-picker-indicator {
+      padding: 0.25rem;
+      margin-inline-start: 0.25rem;
+      border-radius: var(--radius-pb-sm);
+      cursor: pointer;
+      opacity: 0.6;
+      transition:
+        opacity var(--duration-pb-fast) var(--ease-pb-out),
+        background-color var(--duration-pb-fast) var(--ease-pb-out);
+    }
+
+    &::-webkit-calendar-picker-indicator:hover {
+      opacity: 1;
+      background-color: var(--color-pb-neutral-surface);
+    }
+  }
+
+  // In dark mode the indicator is a black glyph on a dark field. `invert` is the only hook browsers
+  // give for it.
+  :where(.dark) & input[type='date']::-webkit-calendar-picker-indicator,
+  :where(.dark) & input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+// Dialog surface: the system's radius and a hairline, so a dialog has an edge on a dark backdrop.
+.mat-mdc-dialog-container {
+  --mdc-dialog-container-shape: var(--radius-pb-xl);
+
+  // The radius is set on the surface directly as well as through the token. Material 3's default is a
+  // 28px pill-ish corner, and it wins from its own stylesheet — setting only the custom property left
+  // dialogs at 28px while every other surface in the app is 12–16px, which made a dialog look like it
+  // came from a different product.
+  .mat-mdc-dialog-surface {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: var(--radius-pb-xl) !important;
+    box-shadow: var(--shadow-pb-lg) !important;
+  }
+
+  // Material pads the content 20px and the title 24px, so the title and the first field are misaligned
+  // by 4px down the left edge of every dialog. `pb-dialog-shell` sets its own padding on both; this
+  // clears Material's so the two do not add up.
+  .mat-mdc-dialog-title::before {
+    display: none;
+  }
+
+  .mat-mdc-dialog-actions {
+    min-height: auto;
+    // The footer sits on the sunken surface, which is what separates it from the scrolling body
+    // without a rule — one fewer line across a dialog that already has a header rule.
+    background-color: var(--color-pb-surface-sunken);
+  }
+}
+
+// A submitting button keeps full contrast: the spinner says "working", and Material's disabled opacity
+// would say "unavailable". See the note on `pb-submit-button`.
+.pb-submit-busy.mat-mdc-button-base[disabled] {
+  opacity: 1;
+
+  --mat-button-filled-disabled-container-color: var(--mat-sys-primary);
+  --mat-button-filled-disabled-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-outlined-disabled-label-text-color: var(--mat-sys-primary);
+}
+
+// Destructive confirm button in ConfirmDialogComponent.
+.pb-button-danger {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+}
+
+// Destructive text button, e.g. "Delete item" in the row action sheet. A class rather
+// than a Tailwind utility because Material's own label colour token would otherwise win.
+.pb-text-error {
+  --mat-button-text-label-text-color: var(--mat-sys-error);
+  --mat-button-text-icon-color: var(--mat-sys-error);
+  color: var(--mat-sys-error);
+}
+
+// Snackbar variants used by NotificationService. Colours come from the design
+// system's tones, so a warning snackbar is amber and an error snackbar is red in
+// both themes.
+//
+// The warning variant previously borrowed `tertiary-container`, which on the old
+// rose palette meant a warning toast was pink — indistinguishable at a glance
+// from the brand, and from the error toast beside it. Naming the tone directly
+// is what stops that recurring the next time the palette moves.
+.pb-snackbar-error {
+  --mdc-snackbar-container-color: var(--color-pb-danger-surface);
+  --mdc-snackbar-supporting-text-color: var(--color-pb-danger-fg);
+  --mat-snack-bar-button-color: var(--color-pb-danger-fg);
+}
+
+.pb-snackbar-warning {
+  --mdc-snackbar-container-color: var(--color-pb-warning-surface);
+  --mdc-snackbar-supporting-text-color: var(--color-pb-warning-fg);
+  --mat-snack-bar-button-color: var(--color-pb-warning-fg);
+}
+
+// Success and info keep the default inverse surface — a dark toast on a light
+// page. Only the action link is tinted, and it is pink rather than the brown:
+// on the inverse surface the chocolate is very nearly the background.
+.pb-snackbar-success,
+.pb-snackbar-info {
+  --mat-snack-bar-button-color: var(--pb-pink-300);
+}

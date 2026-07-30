@@ -1,0 +1,31 @@
+{
+  "name": "paris-bites-oms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paris Bites — Inventory Management System (Angular + Express + Prisma)",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "//": "Deliberately NOT an npm workspace. The frontend deploys to Vercel and the backend to Railway; each platform installs from its own subdirectory, and workspace hoisting would place dependencies in a root node_modules that neither build uploads. The scripts below delegate with --prefix so frontend/ and backend/ stay independently installable.",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+
+    "dev": "concurrently --names \"api,web\" --prefix-colors \"magenta,cyan\" --kill-others \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev --prefix backend",
+    "dev:web": "npm run start --prefix frontend",
+
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "build:api": "npm run build --prefix backend",
+    "build:web": "npm run build --prefix frontend",
+
+    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+
+    "db:migrate": "npm run prisma:migrate --prefix backend",
+    "db:seed": "npm run prisma:seed --prefix backend",
+    "db:studio": "npm run prisma:studio --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

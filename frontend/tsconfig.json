@@ -1,0 +1,46 @@
+/* Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    /* Strictness. Beyond Angular's defaults, three flags are added deliberately:
+       - noUncheckedIndexedAccess: `arr[0]` is `T | undefined`, which is the truth
+       - exactOptionalPropertyTypes: `{ a?: string }` will not accept `undefined`
+       - noUnusedLocals/Parameters: dead code fails the build rather than rotting
+       These catch real bugs but require honest handling of absent values. */
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve"
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "typeCheckHostBindings": true,
+    /* Type-checks expressions inside templates, including generics on inputs.
+       This is what makes `<pb-data-table [columns]>` verify against `TableColumn<T>`. */
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
+  ]
+}

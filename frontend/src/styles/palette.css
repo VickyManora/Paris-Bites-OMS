@@ -1,0 +1,236 @@
+/*
+ * Paris Bites palette — the primitive layer.
+ *
+ * **This is the only file in the app where a colour may be written as a hex literal.** Everything
+ * else refers to a name from here, and the semantic layer in `design-system.css` decides what each
+ * name *means*. Two layers rather than one because "the brand pink" and "the colour a link is" are
+ * different facts: the first changes when the brand changes, the second when the design changes, and
+ * collapsing them is why a palette ends up with `--color-pink-that-is-also-the-link`.
+ *
+ * Nothing here is theme-aware. A primitive is a constant — `--pb-pink-500` is the same pink at
+ * midnight as at noon. Light and dark are decided one layer up, by which primitive each semantic
+ * token points at.
+ *
+ * ## The ramps
+ *
+ * Each ramp is a lightness ladder at roughly constant hue, numbered the way Tailwind and Radix
+ * number theirs: 50 is nearly the background, 950 is nearly the text. The steps are not evenly
+ * spaced in RGB — they are spaced so that *adjacent steps are distinguishable* and so that the steps
+ * a UI actually reaches for (50 for a tint, 200 for a border, 500 for a mark, 700 for text on white)
+ * land where they are needed.
+ *
+ * ## The contrast figures in the comments are measured, not estimated
+ *
+ * Every `N:1` below is the WCAG 2.1 contrast ratio against pure white, computed from the sRGB
+ * relative luminance of that exact hex. They are recorded inline because the single most common way
+ * a palette goes wrong is a designer picking a mid-tone for text — brand colours are chosen for how
+ * they look as a *fill*, and a fill has no contrast requirement while text has 4.5:1.
+ *
+ * The rule this file encodes: **500 is a fill, 700 is text.** Reaching for a 400 or 500 as a text
+ * colour on a light surface is a bug, and the ramps are built so there is always a correct step to
+ * reach for instead.
+ */
+
+:root {
+  /* ===================================================================
+   * NEUTRAL — the page, the cards, the borders, the text
+   *
+   * Very slightly cool (hue ~265) rather than pure grey. A truly neutral grey next to white reads
+   * faintly yellow-green, which is the difference between a page that looks clean and one that
+   * looks slightly dirty. The tint is small enough that nobody names it and large enough that the
+   * greys agree with each other.
+   *
+   * This ramp replaces the rose-tinted neutrals the Material `$rose-palette` was generating
+   * (`#fff8f8` page, `#f5dade` borders). Those are the beige the redesign is removing: an
+   * algorithmic M3 palette tints every surface with the brand hue, which is exactly what makes a
+   * business app look like a themed template rather than a product.
+   * =================================================================== */
+
+  --pb-neutral-0: #ffffff; /*     cards, menus, inputs — the content surface */
+  --pb-neutral-25: #fafafb; /*    the page behind the cards */
+  --pb-neutral-50: #f5f5f7; /*    table headers, wells, sunken areas */
+  --pb-neutral-100: #eeeef1; /*   subtle fills, disabled surfaces */
+  --pb-neutral-150: #e7e7eb; /*   hairline on white where 200 is too strong */
+  --pb-neutral-200: #dfdfe4; /*   the default border */
+  --pb-neutral-300: #c9c9d1; /*   a border that needs to be seen; dividers on tinted ground */
+  --pb-neutral-400: #a6a6b2; /*   icons at rest, disabled text (1.9:1 — decorative only) */
+  --pb-neutral-500: #82828f; /*   placeholder text (3.8:1 — never body copy) */
+  --pb-neutral-600: #61616e; /*   secondary text, captions, metadata (6.1:1) */
+  --pb-neutral-700: #47474f; /*   strong secondary, icon paired with body text (9.2:1) */
+  --pb-neutral-800: #2e2e36; /*   headings on a light surface (13.1:1) */
+  --pb-neutral-900: #1c1c22; /*   body text (16.1:1) */
+  --pb-neutral-950: #121216; /*   display figures, the highest-emphasis text */
+
+  /* ===================================================================
+   * INK — the dark-mode surfaces
+   *
+   * A separate ramp from the neutrals rather than the neutrals reversed, because dark mode is not
+   * an inversion. Inverting puts the page at `#050505` and the cards at `#0a0a0a`, where the
+   * separation between them is a difference no screen shows in a bright room; and it makes every
+   * shadow useless, since black on black is nothing.
+   *
+   * These start at a *lifted* black (`#0c0c0f`, not `#000`) and step in even, visible increments,
+   * so a card, a menu on the card and a dialog over both are three distinguishable planes. Slightly
+   * cool for the same reason as the neutrals, and matched to them in hue so the two themes are
+   * recognisably one product.
+   * =================================================================== */
+
+  --pb-ink-950: #0c0c0f; /*   the page */
+  --pb-ink-900: #131318; /*   cards — the content surface */
+  --pb-ink-800: #1a1a21; /*   raised: menus, popovers, table headers */
+  --pb-ink-700: #22222b; /*   dialogs, the highest plane */
+  --pb-ink-600: #2c2c37; /*   the default border in dark */
+  --pb-ink-500: #3a3a47; /*   a border that needs to be seen */
+  --pb-ink-400: #55556380; /*  reserved for state layers — carries its own alpha */
+
+  /* ===================================================================
+   * CHOCOLATE — the primary brand colour
+   *
+   * `#3b2416` is the shop's brown and the anchor of the identity. It is extremely dark: **14.5:1**
+   * on white, darker than the body text sitting next to it.
+   *
+   * That is a strength for the one job it has — a filled button, a nav rail, a committed selection —
+   * where white on it is unmissable. It is also why brown is *rationed*: a page that paints its
+   * cards, borders and headings in it has no contrast left to spend on the thing it wants read
+   * first, and reads as a brochure rather than as a tool. See the `--pb-color-primary` note in
+   * `design-system.css` for where it is allowed.
+   *
+   * The pale steps exist so a brown *tint* is available (a selected row, a hovered nav item) without
+   * anyone mixing one at the call site and inventing a fifth almost-identical beige.
+   * =================================================================== */
+
+  --pb-brown-50: #fbf8f6; /*   the faintest wash — a selected row on white */
+  --pb-brown-100: #f1e9e3; /*  a selected nav pill, a brand-tinted well */
+  --pb-brown-200: #e0d0c4; /*  border on a brown-tinted surface */
+  --pb-brown-300: #c4aa96; /*  primary in dark mode is built near here */
+  --pb-brown-400: #a08063;
+  --pb-brown-500: #7d5f45;
+  --pb-brown-600: #614732; /*  hover state of a filled brown button (lighter, not darker — see below) */
+  --pb-brown-700: #4c3524;
+  --pb-brown-800: #3b2416; /*  ← THE BRAND. 14.5:1 on white */
+  --pb-brown-900: #2b1810; /*  pressed state of a filled brown button */
+  --pb-brown-950: #1a0e08;
+
+  /*
+   * Dark mode cannot use the brand brown, and no ramp step fixes that.
+   *
+   * `#3b2416` on the dark page (`#0c0c0f`) measures **1.4:1** — a brown button in dark mode is a
+   * button-shaped hole. The honest answer is the one Linear, Vercel and Stripe all use: invert the
+   * primary. In dark mode the high-emphasis button is *light* with dark text on it.
+   *
+   * This is the warm cream that plays that role — the brand's own colour temperature carried into
+   * the inversion, so the button still reads as Paris Bites rather than as a default white pill.
+   */
+  --pb-cream: #ead9cb; /*     12.4:1 on the dark page; pairs with `--pb-brown-900` as its text */
+  --pb-cream-dim: #d6c1af; /*  its hover step */
+
+  /* ===================================================================
+   * GOLD — premium, revenue, highlights
+   *
+   * `#c89b5b` is a *fill and a highlight*, and the ramp exists mostly to stop it being used as text.
+   * Gold on white measures **2.5:1**: below the 3:1 floor for even large text and interface
+   * components, let alone the 4.5:1 body text needs. A revenue figure set in `#c89b5b` on a white
+   * card is unreadable in daylight, and it is the single most likely mistake this brief invites.
+   *
+   * So: the brand gold marks (a rule, a border, an icon on a dark ground, a chart series), and
+   * `--pb-gold-600` is what gold *text* is. It reads unmistakably as the same colour at 4.8:1.
+   *
+   * On the brand brown, the brand gold is fine — 5.7:1 — which is why the logo works and why gold
+   * on a brown surface needs no substitution.
+   * =================================================================== */
+
+  --pb-gold-50: #fcf8f1; /*    a premium-tinted surface */
+  --pb-gold-100: #f6ebd7; /*   its border */
+  --pb-gold-200: #edd8b2;
+  --pb-gold-300: #dfbc84;
+  --pb-gold-400: #c89b5b; /*   ← THE BRAND. A fill, a rule, a mark — 2.5:1, never text on white */
+  --pb-gold-500: #b4823f;
+  --pb-gold-600: #96692e; /*   gold *text* on a light surface — 4.8:1 */
+  --pb-gold-700: #7a5525;
+  --pb-gold-800: #5e4020;
+  --pb-gold-900: #422d17;
+
+  /* ===================================================================
+   * PINK — hover, selection, links, focus, notification
+   *
+   * `#ff4d8d` is the interaction colour: the thing that says "this responds to you". It is the one
+   * genuinely bright colour in the system and it does the work the brown cannot, because brown at
+   * 14.5:1 is too heavy to mark something as merely *hoverable*.
+   *
+   * Two thresholds matter and they are different, which is why this ramp has two working steps:
+   *
+   * - A **focus ring, a hover tint, a badge dot** is a non-text interface component: WCAG 2.1
+   *   requires 3:1. `#ff4d8d` is 3.1:1 on white and clears it — just.
+   * - A **link, or white text on a pink badge**, is text: 4.5:1. `#ff4d8d` measures 3.1:1 and fails.
+   *   A pink link on a white card is the accessibility bug this brief would otherwise ship.
+   *
+   * `--pb-pink-700` is therefore what pink *text* is (5.7:1), and what a pink fill carrying white
+   * text is. It is visibly the same pink, two shades in. The bright `#ff4d8d` keeps every job where
+   * it is legal: rings, tints, rules, and dots that carry no glyph.
+   * =================================================================== */
+
+  --pb-pink-50: #fff1f6; /*    hover wash on white */
+  --pb-pink-100: #ffe0ec; /*   selection wash, badge surface */
+  --pb-pink-200: #ffc2d9; /*   border of a pink-tinted surface */
+  --pb-pink-300: #ff97be; /*   links and pink text in *dark* mode */
+  --pb-pink-400: #ff6f9f;
+  --pb-pink-500: #ff4d8d; /*   ← THE BRAND. Ring, tint, rule, dot — 3.1:1, not text */
+  --pb-pink-600: #e62371;
+  --pb-pink-700: #c7175c; /*   pink *text* on a light surface, and a badge under white text — 5.7:1 */
+  --pb-pink-800: #a31049;
+  --pb-pink-900: #7d0b37;
+
+  /* ===================================================================
+   * STATUS — success, warning, danger, info
+   *
+   * The four hexes the brief names are the **base** step of each ramp: the colour of a dot, a chart
+   * mark, a progress bar, a border. Each ramp then carries a 50 for the surface behind a badge and a
+   * 700 for the text on it, because — exactly as with gold and pink — none of the four base colours
+   * is legible as text on white:
+   *
+   *   #22c55e green 2.3:1 · #f59e0b amber 2.1:1 · #ef4444 red 3.8:1 · #3b82f6 blue 3.7:1
+   *
+   * All four 700s clear 4.5:1 (5.0, 5.0, 6.5, 6.7). A badge is assembled from one ramp — 50 behind,
+   * 200 around, 700 on — never from three separate guesses.
+   *
+   * These hues are deliberately **outside the brand**. The previous system derived success from
+   * Material's `tertiary` and danger from its `error`, which on a rose palette made both pink: "Paid",
+   * "Cancelled" and "Awaiting payment" rendered as three shades of one colour. Green must mean safe
+   * and red must mean stop even on a page whose brand is pink, so these do not move with it.
+   *
+   * **Colour is never the only signal.** Roughly one man in twelve cannot separate the success and
+   * danger hues, so every component built on these ships an icon or a word alongside the colour.
+   * =================================================================== */
+
+  --pb-success-50: #ecfdf3;
+  --pb-success-100: #d1fadf;
+  --pb-success-200: #a7f3c4;
+  --pb-success-500: #22c55e; /*  ← THE BRAND STATUS. Dot, bar, mark — 2.3:1, not text */
+  --pb-success-600: #16a34a;
+  --pb-success-700: #15803d; /*  success *text* — 5.0:1 */
+  --pb-success-300-dark: #6ee7a3; /* success text in dark mode */
+
+  --pb-warning-50: #fffaeb;
+  --pb-warning-100: #fef0c7;
+  --pb-warning-200: #fde68a;
+  --pb-warning-500: #f59e0b; /*  ← THE BRAND STATUS — 2.1:1, not text */
+  --pb-warning-600: #d97706;
+  --pb-warning-700: #b45309; /*  warning *text* — 5.0:1 */
+  --pb-warning-300-dark: #fcd34d;
+
+  --pb-danger-50: #fef3f2;
+  --pb-danger-100: #fee4e2;
+  --pb-danger-200: #fecdca;
+  --pb-danger-500: #ef4444; /*   ← THE BRAND STATUS — 3.8:1, not text */
+  --pb-danger-600: #dc2626;
+  --pb-danger-700: #b91c1c; /*   danger *text* — 6.5:1 */
+  --pb-danger-300-dark: #fca5a5;
+
+  --pb-info-50: #eff6ff;
+  --pb-info-100: #dbeafe;
+  --pb-info-200: #bfdbfe;
+  --pb-info-500: #3b82f6; /*     ← THE BRAND STATUS — 3.7:1, not text */
+  --pb-info-600: #2563eb;
+  --pb-info-700: #1d4ed8; /*     info *text* — 6.7:1 */
+  --pb-info-300-dark: #93c5fd;
+}

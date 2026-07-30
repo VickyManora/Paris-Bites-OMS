@@ -1,0 +1,104 @@
+/*
+ * Tailwind v4 entry point.
+ *
+ * Kept as a plain .css file, separate from styles.scss, on purpose: Sass does
+ * not understand `@import ... layer(...)`, so putting these lines in a .scss
+ * file breaks the build.
+ *
+ * PREFLIGHT IS DELIBERATELY OMITTED. Tailwind's reset unstyles buttons and
+ * inputs and rewrites heading margins, which fights Angular Material's own
+ * baseline and visibly breaks Material form fields. Importing only the `theme`
+ * and `utilities` layers gives us Tailwind's utilities with Material's reset
+ * left intact.
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Explicit scan roots — Tailwind only generates classes it can see used. */
+@source '../app';
+@source '../index.html';
+
+/*
+ * The palette primitives. Imported first, because every layer below refers to them by name and
+ * nothing below is allowed to write a hex of its own.
+ */
+@import './palette.css';
+
+/*
+ * Point-of-sale palette.
+ *
+ * The POS has its own named brand colours, and they deliberately do not go through the `@theme
+ * inline` bridge below — feeding them in there would repaint every other screen in the app.
+ *
+ * They are fixed rather than theme-derived, because a POS runs on one tablet in one lighting
+ * condition and the counter staff should see the same thing every shift. That is still true; what
+ * changed in the redesign is only which values they point at.
+ *
+ * **`--color-pos-vanilla` is now white, not cream.** It was `#fff8f2`, and as the POS surface colour
+ * it was the single largest area of beige in the application — the brief's complaint, rendered at
+ * full screen on the till. The rest of the identity is unchanged: chocolate and gold are the same
+ * hexes they always were, now sourced from the ramp so there is one definition of each.
+ */
+@theme {
+  --color-pos-brown: var(--pb-brown-800);
+  --color-pos-gold: var(--pb-gold-400);
+  --color-pos-pink: var(--pb-pink-100);
+  --color-pos-vanilla: var(--pb-neutral-0);
+}
+
+/*
+ * Bridge Material 3's system colour tokens into Tailwind's colour scale, so `bg-surface` and
+ * `text-on-surface-variant` resolve to whatever the Material theme produced. Without this, Tailwind
+ * colours and Material colours would be two unrelated palettes and dark mode would only fix half the
+ * page.
+ *
+ * The roles themselves are re-pointed at the design system in `styles.scss` — see the bridge note
+ * there. This block only decides which of them Tailwind exposes as utilities.
+ */
+
+@theme inline {
+  --color-primary: var(--mat-sys-primary);
+  --color-on-primary: var(--mat-sys-on-primary);
+  --color-primary-container: var(--mat-sys-primary-container);
+  --color-on-primary-container: var(--mat-sys-on-primary-container);
+
+  --color-secondary: var(--mat-sys-secondary);
+  --color-on-secondary: var(--mat-sys-on-secondary);
+
+  --color-tertiary: var(--mat-sys-tertiary);
+  --color-on-tertiary: var(--mat-sys-on-tertiary);
+
+  --color-error: var(--mat-sys-error);
+  --color-on-error: var(--mat-sys-on-error);
+  --color-error-container: var(--mat-sys-error-container);
+
+  --color-surface: var(--mat-sys-surface);
+  --color-on-surface: var(--mat-sys-on-surface);
+  --color-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --color-surface-container: var(--mat-sys-surface-container);
+  --color-surface-container-low: var(--mat-sys-surface-container-low);
+  --color-surface-container-high: var(--mat-sys-surface-container-high);
+
+  --color-outline: var(--mat-sys-outline);
+  --color-outline-variant: var(--mat-sys-outline-variant);
+}
+
+/*
+ * Drive dark mode from the `.dark` class that ThemeService toggles, instead of
+ * Tailwind's default `prefers-color-scheme` query. The two must agree, and the
+ * class is what lets a user override their OS setting.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design system tokens and style utilities.
+ *
+ * Imported last so its `@theme` block sees the Material bridge above — the status tones and
+ * elevation are mixed over `--mat-sys-*`, which has to exist by the time they resolve.
+ *
+ * Every name in there is prefixed `pb-` and adds to the vocabulary rather than replacing any of
+ * it, so importing this file changes how nothing currently renders.
+ */
+@import './design-system.css';

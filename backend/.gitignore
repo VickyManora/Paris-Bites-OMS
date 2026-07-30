@@ -1,0 +1,17 @@
+node_modules/
+dist/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Generated Prisma client — rebuilt by `prisma generate` on every install
+src/generated/
+
+# Logs and coverage
+*.log
+npm-debug.log*
+coverage/
+
+.DS_Store

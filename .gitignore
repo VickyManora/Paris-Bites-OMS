@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out-tsc/
+.angular/
+
+# Environment — secrets never enter git
+.env
+.env.*
+!.env.example
+
+# Generated Prisma client (rebuilt by `prisma generate` on install)
+backend/src/generated/
+
+# Logs and coverage
+*.log
+npm-debug.log*
+yarn-error.log*
+coverage/
+
+# Editors
+.idea/*
+!.idea/.gitignore
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# OS
+.DS_Store
+Thumbs.db

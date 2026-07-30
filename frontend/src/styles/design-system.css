@@ -1,0 +1,1464 @@
+/*
+ * Paris Bites design system — the semantic layer.
+ *
+ * One file, one job: name every visual decision so screens stop inventing their own. Nothing here
+ * renders anything on its own; it defines the vocabulary that components and pages draw from.
+ *
+ * ## The three layers, and why there are three
+ *
+ *   palette.css        `--pb-pink-500: #ff4d8d`      what colours exist          (a brand fact)
+ *   design-system.css  `--color-pb-link: pink-700`   what each colour means      (a design fact)
+ *   styles.scss        `--mat-sys-primary: …`        what Material renders with  (a plumbing fact)
+ *
+ * A token in the middle layer answers "what is this *for*", never "what colour is it". That is what
+ * lets dark mode exist as a hundred-line block instead of a second stylesheet: only this layer
+ * flips, because only this layer holds opinions.
+ *
+ * ## Why every token is prefixed `pb-`
+ *
+ * So a name is unambiguous next to Tailwind's (`rounded-xl`, `shadow-sm`) and Material's
+ * (`--mat-sys-*`). `pb-` means "this app decided this".
+ *
+ * ## What changed in this phase, and what did not
+ *
+ * This is a **visual identity change**, and unlike the phase that first built this file it is
+ * deliberately not invisible. The Material rose palette that produced the beige page (`#fff8f8`)
+ * and pink-tinted borders is gone; the surfaces are neutral, the brand is rationed, and the
+ * interaction colour is the pink.
+ *
+ * No page template, component class list, API or query was touched to do it. Every screen inherits
+ * the new identity because every screen already reads these tokens and the Material roles bridged
+ * to them in `styles.scss` — which is the entire argument for having had a token layer.
+ */
+
+/*
+ * `static` matters here.
+ *
+ * By default Tailwind v4 tree-shakes theme variables it cannot see referenced, which is right for
+ * an app and wrong for a foundation: half these tokens exist to be used from a component's own
+ * stylesheet or an inline style, where Tailwind's scanner will never find them. Without `static`,
+ * `var(--text-pb-display)` resolves to nothing until some page happens to use the matching utility
+ * class — a dependency between two unrelated files that would be very hard to diagnose.
+ */
+@theme static {
+  /* ===================================================================
+   * SURFACES
+   *
+   * Four planes, and the rule is that **depth is carried by the border, not by the shadow**. That is
+   * the whole difference between the Linear/Stripe look this is aiming at and a Material one: M3
+   * separates surfaces by tinting them with the brand and floating them on shadows, which at three
+   * cards per row turns a dashboard into a pile of slabs.
+   *
+   * Here the page is `#fafafb`, every card on it is pure `#ffffff`, and what separates them is a
+   * 1px `--color-pb-border`. The shadow is nearly nothing — it exists to keep the white card from
+   * looking *pasted on*, not to lift it.
+   *
+   * `page` and `surface` are only 2% apart in lightness. That is intentional and it is enough: the
+   * eye reads the border first and the tone second. A bigger gap is how you get a grey page that
+   * looks unfinished.
+   * =================================================================== */
+
+  --color-pb-page: var(--pb-neutral-25); /*      the app background, behind everything */
+  --color-pb-surface: var(--pb-neutral-0); /*    cards, panels, inputs, menus — pure white */
+  --color-pb-surface-raised: var(--pb-neutral-0); /* popovers and dialogs: same white, more shadow */
+  --color-pb-surface-sunken: var(--pb-neutral-50); /* table headers, wells, empty states */
+
+  /* Behind a dialog. Deep enough to mute the page, not so deep the page disappears — the user
+   * should still see where they were. */
+  --color-pb-scrim: rgb(18 18 22 / 0.45);
+
+  /* The deliberately-opposite surface: a snackbar, a tooltip. Dark in light mode and light in dark,
+   * because a transient message has to separate from the page it is covering, and matching it is how
+   * a toast gets missed. */
+  --color-pb-inverse-surface: var(--pb-neutral-900);
+  --color-pb-inverse-text: var(--pb-neutral-25);
+
+  /* ===================================================================
+   * TEXT
+   *
+   * Four emphases, and every one of them is a measured contrast ratio rather than a feeling. The
+   * failure mode this prevents is the one every "premium, airy" redesign hits: light grey secondary
+   * text that looks refined in the mockup and is unreadable on a laptop at an angle.
+   *
+   * `muted` is the floor, and it is explicitly **not for prose** — it sits at 3.8:1, which is legal
+   * for a placeholder inside a field the user is about to type into and illegal for a sentence.
+   * =================================================================== */
+
+  --color-pb-text: var(--pb-neutral-900); /*           body and headings — 16.1:1 */
+  --color-pb-text-secondary: var(--pb-neutral-600); /*  captions, metadata, helper text — 6.1:1 */
+  --color-pb-text-muted: var(--pb-neutral-500); /*      placeholders only — 3.8:1, never prose */
+  --color-pb-text-disabled: var(--pb-neutral-400); /*   a control that cannot be used — 1.9:1 */
+  --color-pb-text-inverse: var(--pb-neutral-0); /*      on a brown, pink or dark fill */
+
+  /* ===================================================================
+   * BORDERS
+   *
+   * Three weights, one width. Everything in the app is a **1px** border — a design system that
+   * offers 2px borders gets 2px borders, and a page of 2px boxes reads as a form from 2009. Emphasis
+   * comes from the colour, never from the thickness.
+   *
+   * `subtle` is for rules *inside* a surface (between table rows, between a card's sections) and
+   * `default` for the edge *of* a surface. Using one for both is what makes a card look like a table
+   * and a table look like a grid.
+   * =================================================================== */
+
+  --color-pb-border-subtle: var(--pb-neutral-150); /*  row rules, section dividers inside a card */
+  --color-pb-border: var(--pb-neutral-200); /*         the edge of a card, input, menu */
+  --color-pb-border-strong: var(--pb-neutral-300); /*  hovered card, focused input, emphasised edge */
+
+  --pb-border-width: 1px;
+
+  /* ===================================================================
+   * PRIMARY — chocolate brown, and the discipline around it
+   *
+   * `#3b2416` is the brand and it is 14.5:1 on white, which makes it the loudest thing this system
+   * can put on a page. Loud is correct for a submit button and wrong for everything else, so the
+   * brief's list is treated as exhaustive rather than illustrative:
+   *
+   *   ✓ primary buttons   ✓ navigation   ✓ selected items   ✓ important actions
+   *   ✗ headings   ✗ card borders   ✗ icons   ✗ table headers   ✗ anything decorative
+   *
+   * The rejected list is the load-bearing half. Brown headings on beige cards is precisely the
+   * "generic ERP" the redesign is escaping, and it comes back the moment brown is available as a
+   * general-purpose dark colour. Headings use `--color-pb-text`, which is a near-black that lets the
+   * brown mean something when it does appear.
+   *
+   * **Hover goes lighter, not darker.** `#3b2416` is four points off black; darkening it produces a
+   * state change nobody can see. Lifting to `brown-600` is visible, and it matches how a light
+   * button dims on hover — both move *toward* the middle.
+   * =================================================================== */
+
+  --color-pb-primary: var(--pb-brown-800);
+  --color-pb-primary-hover: var(--pb-brown-600);
+  --color-pb-primary-pressed: var(--pb-brown-900);
+  --color-pb-on-primary: var(--pb-neutral-0); /*   white on brown — 14.5:1 */
+
+  /* The brown as a *tint*: a selected row, the active nav pill. Flat steps from the ramp rather than
+   * a `color-mix` at the call site, so every selected thing in the app is the same beige. */
+  --color-pb-primary-tint: var(--pb-brown-50);
+  --color-pb-primary-tint-strong: var(--pb-brown-100);
+  --color-pb-primary-tint-border: var(--pb-brown-200);
+
+  /* ===================================================================
+   * GOLD — premium, revenue, highlight
+   *
+   * The colour that says "this number is the point of the screen". Reserved for money, for a premium
+   * or featured marker, and for the brand mark itself.
+   *
+   * Two tokens because gold has two contrast lives: `--color-pb-gold` is the brand `#c89b5b` and is a
+   * **fill, rule or mark only** (2.5:1 — it fails even the 3:1 non-text floor on white, so it must
+   * never be the only thing carrying meaning either). `--color-pb-gold-fg` is what gold *text* is.
+   *
+   * A revenue figure set in `#c89b5b` is the mistake this pair exists to prevent.
+   * =================================================================== */
+
+  --color-pb-gold: var(--pb-gold-400); /*        the brand gold: rules, marks, the logo */
+  --color-pb-gold-fg: var(--pb-gold-600); /*     gold text — 4.8:1 */
+  --color-pb-gold-surface: var(--pb-gold-50); /*  behind a premium badge */
+  --color-pb-gold-border: var(--pb-gold-100);
+
+  /* ===================================================================
+   * PINK — the interaction colour
+   *
+   * Everything that responds to a pointer or a keyboard. This is the brightest colour in the system
+   * and the reason the interface stops feeling like a spreadsheet: brown at 14.5:1 is far too heavy
+   * to mark something as merely *hoverable*, and grey-on-grey hover is what "dull" means.
+   *
+   * ## Hover, selection, and the one place the brief contradicts itself
+   *
+   * The brief assigns "Selected Items" to brown and "Selection" to pink. Both are right, about
+   * different things, and the split is:
+   *
+   * - **Pink is transient** — the pointer is here, the keyboard is here, this text is highlighted.
+   *   It disappears when you look away.
+   * - **Brown is committed** — this is the row you chose, this is the page you are on. It survives.
+   *
+   * So a table row washes pink under the cursor and turns brown-tinted once ticked, and the two
+   * never fight because they never mean the same thing. Getting this backwards — brown on hover —
+   * makes the app feel heavy and slow, because the loudest colour on the page chases the mouse.
+   *
+   * ## Why the link colour is not `#ff4d8d`
+   *
+   * `#ff4d8d` is 3.1:1 on white. That clears the 3:1 required of a **focus ring** or a **dot**, and
+   * fails the 4.5:1 required of **text**. A pink link at `#ff4d8d` is unreadable for anyone with
+   * moderately reduced contrast sensitivity, which is most people over about fifty.
+   *
+   * `--color-pb-link` is therefore `pink-700` (5.7:1) — visibly the same pink, legally text. The
+   * bright brand pink keeps every job where it is legal, which is most of them.
+   * =================================================================== */
+
+  --color-pb-interactive: var(--pb-pink-500); /*   the brand pink: rings, rules, dots, marks */
+  --color-pb-link: var(--pb-pink-700); /*          link and pink text — 5.7:1 */
+  --color-pb-link-hover: var(--pb-pink-800);
+
+  /* State washes. Very light on purpose: a hover tint is a hint that something is live, not a
+   * selection. If the wash is strong enough to read as a state, hovering a list looks like the list
+   * is selecting itself as the cursor crosses it. */
+  --color-pb-hover-surface: var(--pb-pink-50);
+  --color-pb-selected-surface: var(--pb-pink-100);
+  --color-pb-selected-border: var(--pb-pink-200);
+
+  /* Notification badge and any pink fill carrying a glyph.
+   *
+   * `pink-700`, not the brand `#ff4d8d`: an unread count is small text, so it needs 4.5:1, and white
+   * on `#ff4d8d` is 3.1:1. The deeper pink reads as the same colour at a glance and is actually
+   * readable at 11px, which is the size a badge is. */
+  --color-pb-badge: var(--pb-pink-700);
+  --color-pb-on-badge: var(--pb-neutral-0);
+
+  /* A pink dot with nothing written on it — the "unread" marker, a live indicator. No text, so the
+   * brand pink is correct here and this is the one badge-adjacent token that keeps it. */
+  --color-pb-dot: var(--pb-pink-500);
+
+  /* ===================================================================
+   * STATUS TONES
+   *
+   * Four semantic tones plus neutral, each a **set** of surface, border, foreground and base, so a
+   * badge or banner is assembled from one tone rather than three guesses. Applying them separately
+   * is how a badge ends up with a success background and a danger border.
+   *
+   * `base` is new in this phase and is the brief's own hex — the colour of a *dot, a bar, a chart
+   * mark, a progress fill*. `fg` is the same tone two steps darker, and is the only one of the four
+   * that may carry text. See the contrast note in `palette.css`.
+   * =================================================================== */
+
+  --color-pb-neutral-surface: var(--pb-neutral-50);
+  --color-pb-neutral-border: var(--pb-neutral-200);
+  --color-pb-neutral-fg: var(--pb-neutral-600);
+  --color-pb-neutral-base: var(--pb-neutral-400);
+
+  --color-pb-success-surface: var(--pb-success-50);
+  --color-pb-success-border: var(--pb-success-200);
+  --color-pb-success-fg: var(--pb-success-700);
+  --color-pb-success-base: var(--pb-success-500);
+
+  --color-pb-warning-surface: var(--pb-warning-50);
+  --color-pb-warning-border: var(--pb-warning-200);
+  --color-pb-warning-fg: var(--pb-warning-700);
+  --color-pb-warning-base: var(--pb-warning-500);
+
+  --color-pb-danger-surface: var(--pb-danger-50);
+  --color-pb-danger-border: var(--pb-danger-200);
+  --color-pb-danger-fg: var(--pb-danger-700);
+  --color-pb-danger-base: var(--pb-danger-500);
+
+  --color-pb-info-surface: var(--pb-info-50);
+  --color-pb-info-border: var(--pb-info-200);
+  --color-pb-info-fg: var(--pb-info-700);
+  --color-pb-info-base: var(--pb-info-500);
+
+  /* The brand tone, for a badge that marks something as premium or featured rather than as a state.
+   * Gold surface, gold text — the one tone that is brand rather than semantic. */
+  --color-pb-accent-surface: var(--pb-gold-50);
+  --color-pb-accent-border: var(--pb-gold-100);
+  --color-pb-accent-fg: var(--pb-gold-600);
+  --color-pb-accent-base: var(--pb-gold-400);
+
+  /* ===================================================================
+   * TYPOGRAPHY
+   *
+   * Seven roles, not a font-size scale. A role carries size, line height, weight and tracking
+   * together, because those four are one decision — a 44px heading at body line height and body
+   * weight is not a heading, it is large text.
+   *
+   * Sizes are in rem so they respect a browser's font setting. Line heights are unitless so they
+   * scale with the size rather than pinning it.
+   *
+   * Tracking tightens as size grows: at display sizes default letter-spacing reads loose and
+   * amateurish, which is most of what separates a premium interface from a default one. Overline
+   * goes the other way — uppercase at 11px set tight is unreadable.
+   *
+   * Body is 14px, not 16px. Dense operational UI — tables, forms, dashboards — reads better at 14,
+   * and this app is almost entirely those.
+   * =================================================================== */
+
+  --text-pb-display: 2.75rem; /* 44px — one number on a page, nothing else */
+  --text-pb-display--line-height: 1.1;
+  --text-pb-display--font-weight: 640;
+  --text-pb-display--letter-spacing: -0.02em;
+
+  --text-pb-heading: 1.75rem; /* 28px — page title */
+  --text-pb-heading--line-height: 1.2;
+  --text-pb-heading--font-weight: 620;
+  --text-pb-heading--letter-spacing: -0.015em;
+
+  --text-pb-title: 1.125rem; /* 18px — card and section title */
+  --text-pb-title--line-height: 1.35;
+  --text-pb-title--font-weight: 600;
+  --text-pb-title--letter-spacing: -0.01em;
+
+  --text-pb-subtitle: 0.9375rem; /* 15px — supporting line under a title */
+  --text-pb-subtitle--line-height: 1.45;
+  --text-pb-subtitle--font-weight: 500;
+  --text-pb-subtitle--letter-spacing: -0.005em;
+
+  --text-pb-body: 0.875rem; /* 14px — the workhorse */
+  --text-pb-body--line-height: 1.55;
+  --text-pb-body--font-weight: 400;
+
+  --text-pb-caption: 0.8125rem; /* 13px — metadata, helper text, timestamps */
+  --text-pb-caption--line-height: 1.45;
+  --text-pb-caption--font-weight: 400;
+
+  /* Uppercase micro-label above a group. Tracking is *wide* here — the one place it should be. */
+  --text-pb-overline: 0.6875rem; /* 11px */
+  --text-pb-overline--line-height: 1.3;
+  --text-pb-overline--font-weight: 600;
+  --text-pb-overline--letter-spacing: 0.08em;
+
+  /* ===================================================================
+   * SPACING — 8px system
+   *
+   * Tailwind's default scale is 4px-based (`p-2` = 8px), which already contains every step below.
+   * These aliases exist so intent survives review: `gap-pb-4` says "one step of the spacing system",
+   * where `gap-6` says "24px, chosen by someone, for some reason".
+   *
+   * 4px is included as the one sub-step, for icon-to-label gaps where 8px visibly detaches the two.
+   * Nothing smaller exists on purpose.
+   * =================================================================== */
+
+  --spacing-pb-0: 0;
+  --spacing-pb-1: 0.25rem; /*  4px — icon to its label */
+  --spacing-pb-2: 0.5rem; /*   8px — inside a control */
+  --spacing-pb-3: 1rem; /*    16px — between related items */
+  --spacing-pb-4: 1.5rem; /*  24px — card padding, between fields */
+  --spacing-pb-5: 2rem; /*    32px — between cards */
+  --spacing-pb-6: 2.5rem; /*  40px — between sections */
+  --spacing-pb-7: 3rem; /*    48px — page gutter on a large screen */
+  --spacing-pb-8: 4rem; /*    64px — major page divisions */
+
+  /* ===================================================================
+   * BORDER RADIUS
+   *
+   * Four steps. Small for things inside things, xl for the outermost surface — nesting a radius
+   * larger than its parent's is what makes a corner look dented.
+   * =================================================================== */
+
+  --radius-pb-sm: 0.375rem; /*  6px — badge, chip, tag */
+  --radius-pb-md: 0.5rem; /*    8px — button, input, small control */
+  --radius-pb-lg: 0.75rem; /*  12px — card, panel, dialog */
+  --radius-pb-xl: 1rem; /*     16px — page-level surface, sheet */
+  --radius-pb-full: 9999px; /*      — pill, avatar */
+
+  /* ===================================================================
+   * ELEVATION
+   *
+   * Deliberately *not* Material's elevation. Material's shadows are large, soft and dark — designed
+   * to read as physical height. On a dense dashboard they turn every card into a floating slab and
+   * the page looks cluttered before any content arrives.
+   *
+   * These are built the way Linear and Stripe build them: a hairline shadow that reads as a *border*
+   * doing the work, plus a second, wider, very low-opacity layer for depth. The result separates
+   * surfaces without announcing itself.
+   *
+   * The opacities are lower than the previous set, because the surfaces beneath them changed. A
+   * shadow tuned against a beige card reads as dirt against a pure white one — white shows a grey
+   * shadow far more honestly, so less of it is needed to do the same job.
+   *
+   * `--shadow-pb-none` exists so a variant can turn elevation off by name rather than by omitting a
+   * class and hoping.
+   * =================================================================== */
+
+  --shadow-pb-none: 0 0 #0000;
+
+  /* Resting card. Barely there — the border carries the separation. */
+  --shadow-pb-xs: 0 1px 2px 0 rgb(18 18 22 / 0.04);
+
+  /* Raised card, hover state. */
+  --shadow-pb-sm: 0 1px 2px 0 rgb(18 18 22 / 0.04), 0 2px 6px -1px rgb(18 18 22 / 0.05);
+
+  /* Menu, popover, dropdown. */
+  --shadow-pb-md: 0 2px 4px -1px rgb(18 18 22 / 0.05), 0 8px 20px -4px rgb(18 18 22 / 0.08);
+
+  /* Dialog, sheet — the only place a shadow should be noticeable. */
+  --shadow-pb-lg: 0 8px 16px -6px rgb(18 18 22 / 0.08), 0 20px 44px -12px rgb(18 18 22 / 0.14);
+
+  /*
+   * The focus ring — pink, and a shadow rather than a border so focus never shifts layout.
+   *
+   * Two layers, and the white one is not decoration. A ring drawn directly against a pink-tinted
+   * hover state, or against a coloured button, has almost no contrast with what it is ringing; the
+   * inner white gap separates the ring from the control so it reads as a ring at any background.
+   * This is how Stripe and GitHub draw theirs, for the same reason.
+   *
+   * WCAG 2.1 requires 3:1 for a focus indicator. `#ff4d8d` measures 3.1:1 on white — it clears, and
+   * it is the reason the ring is the *bright* pink while links are the deeper one.
+   */
+  --shadow-pb-focus: 0 0 0 2px var(--color-pb-surface), 0 0 0 4px var(--color-pb-interactive);
+
+  /* For a control on a surface that is not white — the ring alone, no separating gap. */
+  --shadow-pb-focus-flat: 0 0 0 3px color-mix(in srgb, var(--pb-pink-500) 45%, transparent);
+
+  /* ===================================================================
+   * MOTION
+   *
+   * Fast, short, and mostly easing *out* — an interface feels quick when a change starts immediately
+   * and settles gently, not when it moves for less time.
+   *
+   * Nothing above 240ms. Anything slower reads as the app thinking.
+   * =================================================================== */
+
+  --ease-pb-out: cubic-bezier(0.22, 1, 0.36, 1); /* decelerate — entering, opening */
+  --ease-pb-in-out: cubic-bezier(0.4, 0, 0.2, 1); /* symmetric — moving between states */
+  --ease-pb-spring: cubic-bezier(0.34, 1.4, 0.64, 1); /* slight overshoot — a committed action */
+
+  --duration-pb-instant: 80ms; /*  colour, opacity, a pressed state */
+  --duration-pb-fast: 140ms; /*   hover, focus, small transforms */
+  --duration-pb-base: 200ms; /*   panel, accordion, tab change */
+  --duration-pb-slow: 240ms; /*   dialog, sheet, route transition */
+
+  /* ===================================================================
+   * ICON SIZES
+   *
+   * Icons are sized in steps too, because a 19px icon next to a 20px one is the kind of thing that
+   * makes an interface feel handmade in the wrong way.
+   * =================================================================== */
+
+  --size-pb-icon-xs: 0.875rem; /* 14px — inline with caption text */
+  --size-pb-icon-sm: 1rem; /*     16px — inline with body text */
+  --size-pb-icon-md: 1.25rem; /*  20px — default, in a button */
+  --size-pb-icon-lg: 1.5rem; /*   24px — section header, nav */
+  --size-pb-icon-xl: 2rem; /*     32px — empty state, feature tile */
+  --size-pb-icon-2xl: 3rem; /*    48px — empty state hero */
+
+  /* ===================================================================
+   * CHART COLOURS
+   *
+   * A categorical palette for data marks, in a **fixed order**, plus one brand colour for
+   * single-series charts.
+   *
+   * ## Why charts cannot use the brand or the theme roles
+   *
+   * They once used `--mat-sys-primary`, `-tertiary`, `-secondary` and `-error`, which on the old
+   * rose palette was not four colours: `primary` and `tertiary` resolved to the *same value*, so the
+   * stock-movement chart drew "Purchased" and "Consumed" in one colour and the category donut drew
+   * five slices in three.
+   *
+   * The new identity does not fix that by itself — brown, gold and pink are three colours, not five,
+   * and two of them are close in hue. A categorical palette needs hues chosen for *separation*, which
+   * is a different problem from choosing a brand.
+   *
+   * ## Why these hues, and why this order
+   *
+   * Validated rather than chosen by eye, against the new surfaces (`#ffffff` light, `#131318` dark):
+   * lightness band, chroma floor, colour-vision separation, and contrast against the surface.
+   *
+   * **The order is the safety mechanism, not decoration.** Violet sits between orange and green
+   * deliberately: orange↔green is the pair that collapses under protanopia, and separating them is
+   * what makes the set legible. Do not reorder these without re-validating.
+   *
+   * Slot 5 is headroom. Nothing in the app currently plots five series. Past slot 5 the answer is to
+   * fold the tail together or split the chart, never to synthesise another colour — a generated
+   * ninth hue produces two marks a colour-blind reader cannot separate.
+   *
+   * These are plain hex per mode rather than `light-dark()`, so code that reads them back gets a
+   * value it can actually manipulate.
+   * =================================================================== */
+
+  --color-pb-chart-1: #2a78d6; /* blue */
+  --color-pb-chart-2: #eb6834; /* orange */
+  --color-pb-chart-3: #4a3aa7; /* violet — between orange and green on purpose */
+  --color-pb-chart-4: #008300; /* green */
+  --color-pb-chart-5: #e34948; /* red — headroom; needs a second identity channel in light mode */
+
+  /*
+   * The single-series colour: the brand pink at its text weight.
+   *
+   * One series has no separation problem to solve, so this is the one place a chart can be brand
+   * coloured without risking a collision — and most charts on the dashboard are single-series.
+   *
+   * `pink-700` rather than the brand `#ff4d8d`: a chart line is a thin mark, and a thin mark needs
+   * the contrast of text rather than of a fill. `#ff4d8d` at 1px on white is a suggestion.
+   */
+  --color-pb-chart-brand: #c7175c;
+
+  /* Chart chrome — the grid and axis labels. Kept much lighter than the marks: a grid that competes
+   * with the data is a grid the reader has to look past. */
+  --color-pb-chart-grid: var(--pb-neutral-150);
+  --color-pb-chart-axis: var(--pb-neutral-500);
+
+  /* ===================================================================
+   * SKELETON
+   *
+   * The shimmer's two stops, so the loading placeholder is themed rather than a grey box that looks
+   * broken in dark mode.
+   * =================================================================== */
+
+  --color-pb-skeleton-base: var(--pb-neutral-100);
+  --color-pb-skeleton-sheen: var(--pb-neutral-50);
+}
+
+/* =====================================================================
+ * DARK MODE
+ *
+ * Only the semantic layer flips. The primitives in `palette.css` are constants, and the utilities
+ * below never name a colour directly — so dark mode is this one block, and a token added above
+ * without a line here is a token that will be wrong in dark mode rather than merely unstyled.
+ *
+ * Unlayered `:where(.dark)` on purpose: zero specificity, so it never wins a fight it should lose,
+ * but unlayered beats the `@theme` block above regardless of specificity. `.dark` is what
+ * `ThemeService` toggles.
+ *
+ * ## The two things dark mode cannot inherit
+ *
+ * **The primary inverts.** `#3b2416` on `#0c0c0f` is 1.4:1 — a brown button in dark mode is a
+ * button-shaped hole. The high-emphasis button becomes light-on-dark, in the brand's own cream, the
+ * way Linear, Vercel and Stripe all do it.
+ *
+ * **Every foreground steps toward the light end of its ramp.** `success-700` on a dark card is
+ * unreadable for the same reason `success-500` is unreadable on a white one. The `-300-dark` steps
+ * in `palette.css` exist for exactly this.
+ * ===================================================================== */
+
+:where(.dark) {
+  --color-pb-page: var(--pb-ink-950);
+  --color-pb-surface: var(--pb-ink-900);
+  --color-pb-surface-raised: var(--pb-ink-800);
+  --color-pb-surface-sunken: var(--pb-ink-800);
+  --color-pb-scrim: rgb(0 0 0 / 0.6);
+
+  --color-pb-inverse-surface: #ececf0;
+  --color-pb-inverse-text: var(--pb-neutral-900);
+
+  --color-pb-text: #f2f2f5;
+  --color-pb-text-secondary: #a1a1ad;
+  --color-pb-text-muted: #747480;
+  --color-pb-text-disabled: #55555f;
+  --color-pb-text-inverse: var(--pb-neutral-950);
+
+  --color-pb-border-subtle: var(--pb-ink-700);
+  --color-pb-border: var(--pb-ink-600);
+  --color-pb-border-strong: var(--pb-ink-500);
+
+  /* The inversion. Cream fill, brown text on it — the brand, upside down. */
+  --color-pb-primary: var(--pb-cream);
+  --color-pb-primary-hover: var(--pb-cream-dim);
+  --color-pb-primary-pressed: var(--pb-brown-200);
+  --color-pb-on-primary: var(--pb-brown-900);
+
+  /* Tints become washes of the *light* primary at low alpha — a dark tint of a light colour is the
+   * only way to keep "selected" reading as selected on a near-black card. */
+  --color-pb-primary-tint: rgb(234 217 203 / 0.08);
+  --color-pb-primary-tint-strong: rgb(234 217 203 / 0.14);
+  --color-pb-primary-tint-border: rgb(234 217 203 / 0.24);
+
+  /* Gold needs no substitution on dark — `#c89b5b` is 6.4:1 on `#131318`, so the brand gold is
+   * finally legal as text. This is the one token that gets *brighter* in dark mode. */
+  --color-pb-gold: var(--pb-gold-400);
+  --color-pb-gold-fg: var(--pb-gold-300);
+  --color-pb-gold-surface: rgb(200 155 91 / 0.12);
+  --color-pb-gold-border: rgb(200 155 91 / 0.28);
+
+  /* The bright pink is already correct on dark — it is the *link* that has to lighten, since
+   * `pink-700` on a near-black card is as unreadable as `pink-500` on white. */
+  --color-pb-interactive: var(--pb-pink-500);
+  --color-pb-link: var(--pb-pink-300);
+  --color-pb-link-hover: var(--pb-pink-200);
+
+  --color-pb-hover-surface: rgb(255 77 141 / 0.1);
+  --color-pb-selected-surface: rgb(255 77 141 / 0.16);
+  --color-pb-selected-border: rgb(255 77 141 / 0.32);
+
+  --color-pb-badge: var(--pb-pink-500);
+  --color-pb-on-badge: var(--pb-neutral-950);
+  --color-pb-dot: var(--pb-pink-500);
+
+  --color-pb-neutral-surface: var(--pb-ink-700);
+  --color-pb-neutral-border: var(--pb-ink-500);
+  --color-pb-neutral-fg: #a1a1ad;
+  --color-pb-neutral-base: #747480;
+
+  --color-pb-success-surface: rgb(34 197 94 / 0.12);
+  --color-pb-success-border: rgb(34 197 94 / 0.3);
+  --color-pb-success-fg: var(--pb-success-300-dark);
+
+  --color-pb-warning-surface: rgb(245 158 11 / 0.12);
+  --color-pb-warning-border: rgb(245 158 11 / 0.3);
+  --color-pb-warning-fg: var(--pb-warning-300-dark);
+
+  --color-pb-danger-surface: rgb(239 68 68 / 0.12);
+  --color-pb-danger-border: rgb(239 68 68 / 0.32);
+  --color-pb-danger-fg: var(--pb-danger-300-dark);
+
+  --color-pb-info-surface: rgb(59 130 246 / 0.12);
+  --color-pb-info-border: rgb(59 130 246 / 0.3);
+  --color-pb-info-fg: var(--pb-info-300-dark);
+
+  --color-pb-accent-surface: rgb(200 155 91 / 0.12);
+  --color-pb-accent-border: rgb(200 155 91 / 0.28);
+  --color-pb-accent-fg: var(--pb-gold-300);
+
+  /*
+   * Elevation is light-mode-tuned above: near-black at 4–14% over a white surface. The same shadow
+   * over a dark surface is invisible, so dark mode both deepens the shadow and leans harder on the
+   * border, which is what actually separates surfaces there.
+   */
+  --shadow-pb-xs: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-pb-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 2px 6px -1px rgb(0 0 0 / 0.36);
+  --shadow-pb-md: 0 2px 4px -1px rgb(0 0 0 / 0.44), 0 8px 20px -4px rgb(0 0 0 / 0.5);
+  --shadow-pb-lg: 0 8px 16px -6px rgb(0 0 0 / 0.5), 0 20px 44px -12px rgb(0 0 0 / 0.6);
+
+  /*
+   * Chart marks in dark mode: the same five hues, re-stepped for a dark surface.
+   *
+   * Selected for the dark band rather than derived by lightening the light steps — an automatic flip
+   * lands outside the mark lightness band. Validated as a set against `#131318`.
+   *
+   * Green is deliberately the same hex in both modes: it already sits in the dark band and clears
+   * contrast on both surfaces, so changing it would only make the two themes disagree about which
+   * series green is.
+   */
+  --color-pb-chart-1: #3987e5;
+  --color-pb-chart-2: #d95926;
+  --color-pb-chart-3: #9085e9;
+  --color-pb-chart-4: #008300;
+  --color-pb-chart-5: #e66767;
+
+  --color-pb-chart-brand: #ff6f9f;
+
+  --color-pb-chart-grid: var(--pb-ink-700);
+  --color-pb-chart-axis: #747480;
+
+  --color-pb-skeleton-base: var(--pb-ink-800);
+  --color-pb-skeleton-sheen: var(--pb-ink-700);
+}
+
+/* =====================================================================
+ * COMPONENT STYLE UTILITIES
+ *
+ * Composable classes for the recurring surfaces: card, button, input, table, badge.
+ *
+ * These are `@utility` rather than components because that is the honest shape for a *style*.
+ * Angular Material already owns the behaviour of buttons and inputs — focus, ripple, ARIA, disabled
+ * semantics — and re-implementing that to change a border radius would be a downgrade dressed as a
+ * design system. So these classes restyle what Material renders, or style plain markup where no
+ * Material component is involved.
+ *
+ * Every one of them names a **semantic token**, never a primitive and never a hex. That is what
+ * makes the dark-mode block above sufficient.
+ * ===================================================================== */
+
+/* ---- Cards and surfaces ---- */
+
+/* The resting surface: white card, hairline border doing the separation, shadow barely present. */
+@utility pb-surface {
+  border-radius: var(--radius-pb-lg);
+  border: var(--pb-border-width) solid var(--color-pb-border);
+  background-color: var(--color-pb-surface);
+  box-shadow: var(--shadow-pb-xs);
+}
+
+/*
+ * A surface that responds to the pointer.
+ *
+ * Border to `strong` and shadow to `sm`, plus a 1px lift — not 4px. A card that leaps is a card that
+ * feels cheap, and on a dashboard of twelve tiles a big hover transform makes the whole page twitch
+ * as the cursor crosses it.
+ */
+@utility pb-surface-interactive {
+  cursor: pointer;
+  transition:
+    box-shadow var(--duration-pb-fast) var(--ease-pb-out),
+    border-color var(--duration-pb-fast) var(--ease-pb-out),
+    transform var(--duration-pb-fast) var(--ease-pb-out);
+
+  &:hover {
+    border-color: var(--color-pb-border-strong);
+    box-shadow: var(--shadow-pb-sm);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-pb-xs);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-pb-focus);
+  }
+}
+
+/* Flush section divider inside a surface, at the surface's own padding. */
+@utility pb-divide {
+  border-top: var(--pb-border-width) solid var(--color-pb-border-subtle);
+}
+
+/* ---- Buttons ---- */
+
+/*
+ * Applied *alongside* `matButton`, not instead of it: Material keeps the ripple, focus ring and
+ * disabled handling, and this aligns the geometry with the rest of the system.
+ *
+ * The 40px min-height is the desktop figure. The POS overrides it to 48px at the call site — touch
+ * and pointer want different targets, and pretending otherwise is how a desktop app gets fat buttons
+ * or a tablet app gets unhittable ones.
+ */
+@utility pb-btn {
+  min-height: 2.5rem;
+  border-radius: var(--radius-pb-md);
+  font-size: var(--text-pb-body);
+  font-weight: 550;
+  letter-spacing: 0;
+  transition:
+    background-color var(--duration-pb-instant) var(--ease-pb-in-out),
+    box-shadow var(--duration-pb-fast) var(--ease-pb-out);
+}
+
+@utility pb-btn-lg {
+  min-height: 3rem;
+  border-radius: var(--radius-pb-md);
+  font-size: var(--text-pb-subtitle);
+  font-weight: 600;
+}
+
+/*
+ * The brand gradient: chocolate falling to a darker brown.
+ *
+ * Built for the counter, where a filled button is the thing a thumb aims at under fluorescent light
+ * with a queue behind it. A gradient does one useful thing there that a flat fill cannot: it gives
+ * the surface a **direction**, so the control reads as a raised object rather than as a coloured
+ * rectangle, and a raised object is read as pressable without anyone deciding it is.
+ *
+ * ## Why it is 8% and not 40%
+ *
+ * The two stops are `brown-700` and `brown-900` — a shade either side of the brand `brown-800`. That
+ * is a narrow range on purpose. A gradient wide enough to be *noticed* as a gradient dates the
+ * interface immediately: it reads as a 2010 button, and on a colour this dark it also muddies the
+ * bottom third into near-black, so white text loses its footing on the part of the button most
+ * likely to be under a thumb. At this width nobody sees a gradient; they see a button that looks
+ * lit.
+ *
+ * ## Hover and press
+ *
+ * Hover lifts *both* stops rather than shifting the angle — the object gets brighter, it does not
+ * change shape. Press flattens to the darker end and drops the shadow, which is the whole
+ * vocabulary of a physical key in two properties.
+ *
+ * Contrast is unchanged from the flat brand: white on `brown-700` is 12.2:1 and on `brown-900` is
+ * 16.6:1, so every part of the surface clears AA for large text several times over.
+ */
+@utility pb-gradient-brand {
+  background-image: linear-gradient(180deg, var(--pb-brown-700) 0%, var(--pb-brown-900) 100%);
+  color: var(--color-pb-text-inverse);
+  box-shadow: var(--shadow-pb-sm);
+  transition:
+    background-image var(--duration-pb-fast) var(--ease-pb-out),
+    box-shadow var(--duration-pb-fast) var(--ease-pb-out),
+    transform var(--duration-pb-fast) var(--ease-pb-out);
+
+  &:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, var(--pb-brown-600) 0%, var(--pb-brown-800) 100%);
+    box-shadow: var(--shadow-pb-md);
+  }
+
+  &:active:not(:disabled) {
+    background-image: linear-gradient(180deg, var(--pb-brown-900) 0%, var(--pb-brown-950) 100%);
+    box-shadow: var(--shadow-pb-xs);
+    transform: translateY(1px);
+  }
+
+  &:disabled {
+    background-image: none;
+    background-color: var(--pb-neutral-200);
+    color: var(--color-pb-text-disabled);
+    box-shadow: none;
+  }
+}
+
+/*
+ * The selected-product wash: a warm gradient behind a card already in the order.
+ *
+ * Diagonal rather than vertical, so it cannot be mistaken for the button gradient above — one says
+ * "press me", the other says "you already did". Very pale, because it sits *behind* a photo and a
+ * price and must not compete with either; what carries the state at a distance is the gold border
+ * and the quantity badge, and this is the third, quietest signal.
+ */
+@utility pb-gradient-selected {
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pb-gold-400) 16%, var(--pb-neutral-0)),
+    var(--pb-neutral-0) 62%
+  );
+}
+
+/* ---- Inputs ---- */
+
+/*
+ * For plain `<input>`/`<select>`/`<textarea>` outside a Material form field. Inside one, let Material
+ * own the chrome — two focus treatments on one control is worse than either.
+ */
+@utility pb-input {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--spacing-pb-2) 0.75rem;
+  border-radius: var(--radius-pb-md);
+  border: var(--pb-border-width) solid var(--color-pb-border);
+  background-color: var(--color-pb-surface);
+  color: var(--color-pb-text);
+  font-size: var(--text-pb-body);
+  line-height: 1.5;
+  transition:
+    border-color var(--duration-pb-fast) var(--ease-pb-out),
+    box-shadow var(--duration-pb-fast) var(--ease-pb-out);
+
+  &::placeholder {
+    color: var(--color-pb-text-muted);
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-pb-border-strong);
+  }
+
+  /* Ring rather than a thicker border, so focus never nudges the layout by a pixel. */
+  &:focus-visible {
+    outline: none;
+    border-color: var(--color-pb-interactive);
+    box-shadow: var(--shadow-pb-focus);
+  }
+
+  &:disabled {
+    background-color: var(--color-pb-surface-sunken);
+    color: var(--color-pb-text-disabled);
+    cursor: not-allowed;
+  }
+}
+
+@utility pb-input-invalid {
+  border-color: var(--color-pb-danger-base);
+
+  &:focus-visible {
+    border-color: var(--color-pb-danger-base);
+    box-shadow:
+      0 0 0 2px var(--color-pb-surface),
+      0 0 0 4px var(--color-pb-danger-base);
+  }
+}
+
+/* ---- Tables ---- */
+
+/*
+ * Applied to a `<table>`. Borders are horizontal only — vertical rules turn a table into a grid and
+ * make scanning a row harder, which is the one thing a table exists to do.
+ */
+@utility pb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-pb-body);
+
+  & thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+    white-space: nowrap;
+    font-size: var(--text-pb-overline);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-pb-text-secondary);
+    background-color: var(--color-pb-surface-sunken);
+    border-bottom: var(--pb-border-width) solid var(--color-pb-border);
+  }
+
+  & tbody td {
+    padding: 0.625rem 0.75rem;
+    border-bottom: var(--pb-border-width) solid var(--color-pb-border-subtle);
+    vertical-align: middle;
+    color: var(--color-pb-text);
+  }
+
+  & tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  & tbody tr {
+    transition: background-color var(--duration-pb-instant) var(--ease-pb-in-out);
+  }
+
+  /* Pink, because a hovered row is transient. See the note on the pink tokens. */
+  & tbody tr:hover {
+    background-color: var(--color-pb-hover-surface);
+  }
+
+  /* Money and counts line up only if the digits are tabular and the column is right-aligned. */
+  & .pb-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---- Badges ---- */
+
+/*
+ * Base badge geometry. Pair with a tone class (`pb-tone-success`, …) which supplies the three
+ * colours as a set.
+ */
+@utility pb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-pb-1);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-pb-sm);
+  border: var(--pb-border-width) solid transparent;
+  font-size: var(--text-pb-caption);
+  font-weight: 550;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+@utility pb-badge-pill {
+  border-radius: var(--radius-pb-full);
+  padding-inline: 0.625rem;
+}
+
+/* ---- Tones ----
+ *
+ * One class sets surface, border and foreground together. Applying them separately is how a badge
+ * ends up with a success background and a danger border.
+ */
+
+@utility pb-tone-neutral {
+  background-color: var(--color-pb-neutral-surface);
+  border-color: var(--color-pb-neutral-border);
+  color: var(--color-pb-neutral-fg);
+}
+
+@utility pb-tone-info {
+  background-color: var(--color-pb-info-surface);
+  border-color: var(--color-pb-info-border);
+  color: var(--color-pb-info-fg);
+}
+
+@utility pb-tone-success {
+  background-color: var(--color-pb-success-surface);
+  border-color: var(--color-pb-success-border);
+  color: var(--color-pb-success-fg);
+}
+
+@utility pb-tone-warning {
+  background-color: var(--color-pb-warning-surface);
+  border-color: var(--color-pb-warning-border);
+  color: var(--color-pb-warning-fg);
+}
+
+@utility pb-tone-danger {
+  background-color: var(--color-pb-danger-surface);
+  border-color: var(--color-pb-danger-border);
+  color: var(--color-pb-danger-fg);
+}
+
+/* The brand tone — premium, featured, revenue. Gold, not brown: a badge is small, and the brown at
+ * 14.5:1 reads as a block of ink at 13px. */
+@utility pb-tone-accent {
+  background-color: var(--color-pb-accent-surface);
+  border-color: var(--color-pb-accent-border);
+  color: var(--color-pb-accent-fg);
+}
+
+/* =====================================================================
+ * LOADING
+ * ===================================================================== */
+
+/*
+ * Skeleton placeholder.
+ *
+ * A sweeping sheen rather than a pulsing opacity: a pulse reads as "this element is disabled", while
+ * a sweep reads as "this is arriving". The sweep also runs at a constant speed regardless of element
+ * width, which a scaling animation would not.
+ *
+ * `prefers-reduced-motion` drops the sweep and holds a static tint — the placeholder still
+ * communicates "loading" through shape and position, which is most of its job anyway.
+ */
+@utility pb-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-pb-sm);
+  background-color: var(--color-pb-skeleton-base);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--color-pb-skeleton-sheen) 50%,
+      transparent 100%
+    );
+    animation: pb-skeleton-sweep 1.4s var(--ease-pb-in-out) infinite;
+  }
+}
+
+@keyframes pb-skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-skeleton::after {
+    animation: none;
+    transform: none;
+    background-image: none;
+    background-color: var(--color-pb-skeleton-sheen);
+    opacity: 0.5;
+  }
+}
+
+/* Entry animation for content that has just arrived, so a skeleton swap is not a hard cut. */
+@utility pb-fade-in {
+  animation: pb-fade-in var(--duration-pb-base) var(--ease-pb-out) both;
+}
+
+@keyframes pb-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-fade-in {
+    animation: none;
+  }
+}
+
+/* =====================================================================
+ * SHELL
+ *
+ * The sidebar, top bar and their dropdowns. Separated from the component utilities above because
+ * these are the *frame* rather than the content: there is exactly one of each on screen, they
+ * persist across every navigation, and they are the surfaces a user reads without meaning to. That
+ * makes them the wrong place for anything attention-seeking and the right place for detail.
+ * ===================================================================== */
+
+/*
+ * Icon fill, as an axis rather than a second icon name.
+ *
+ * Material Symbols is loaded as a variable font with a `FILL` axis (see index.html), so the outlined
+ * and filled forms of an icon are one glyph interpolated, not two ligatures. That matters for the
+ * active nav item: swapping `inventory_2` for a hypothetical `inventory_2_filled` would mean
+ * maintaining a parallel set of names and getting one wrong eventually, while animating the axis
+ * gives the state change for free and keeps the metrics identical — a filled glyph is exactly the
+ * width of its outlined twin, so nothing shifts.
+ *
+ * Weight rises slightly with the fill. At 20px a filled glyph at the same weight reads *lighter* than
+ * its outline, because the outline's two strokes are darker than one solid mass.
+ */
+@utility pb-icon-filled {
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 500;
+}
+
+@utility pb-icon-fill-transition {
+  transition: font-variation-settings var(--duration-pb-base) var(--ease-pb-out);
+}
+
+/*
+ * The brand mark: a monogram tile, in the shop's own colours.
+ *
+ * Size comes from the call site (`h-8 w-8`, `h-9 w-9`) because the sidebar rail and the sign-in card
+ * want different ones; everything that makes it the *brand* is here.
+ *
+ * Fixed brand colours rather than semantic tokens, and so identical in light and dark — a logo that
+ * changes colour with the OS setting is not a logo. This is the one element in the system that
+ * deliberately does not flip, and the one place `#3b2416` and `#c89b5b` appear together at full
+ * strength: gold on brown is 5.7:1, so the monogram is legible in both themes without help.
+ *
+ * The gradient is a 12% lift on the same brown rather than a second hue: enough to keep a 32px tile
+ * from reading as a flat swatch, not enough to be noticed as a gradient.
+ *
+ * The inset gold hairline is load-bearing in dark mode, where the brand brown is within a few percent
+ * of the panel behind it and the tile would otherwise have no edge at all.
+ */
+@utility pb-brand-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-pb-md);
+  background-image: linear-gradient(145deg, var(--pb-brown-700), var(--pb-brown-800));
+  color: var(--pb-gold-400);
+  font-size: var(--text-pb-overline);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 0 0 1px rgb(200 155 91 / 0.28);
+  user-select: none;
+}
+
+/*
+ * Initials avatar.
+ *
+ * One definition for all three places a user's initials appear — the sidebar footer, the topbar
+ * button and the account-menu header — because they were three copies of a long class list and had
+ * already drifted apart by a font weight and a ring colour.
+ *
+ * `user-select: none` because initials are not text anyone wants to copy, and a drag across the
+ * topbar selecting "VM" is the kind of small wrongness that reads as unfinished.
+ */
+@utility pb-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-pb-full);
+  background-image: linear-gradient(140deg, var(--color-pb-primary-hover), var(--color-pb-primary));
+  color: var(--color-pb-on-primary);
+  font-size: var(--text-pb-caption);
+  font-weight: 600;
+  line-height: 1;
+  /* Sits *inside* the circle, so the avatar keeps its exact box — a 1px border would shave a pixel
+   * off the initials' area and shift them off centre. */
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1);
+  user-select: none;
+}
+
+/*
+ * Thin, themed scrollbar for the shell's own scroll areas.
+ *
+ * The sidebar nav scrolls on a short viewport, and a default macOS/Windows scrollbar there is a 15px
+ * light-grey gutter carved out of a dark panel. Track stays transparent and the thumb is a border
+ * colour, so it is correct in both themes without a second rule.
+ *
+ * `scrollbar-width`/`scrollbar-color` cover Firefox; the `::-webkit-` block covers the rest. Both are
+ * needed — neither is universal.
+ */
+@utility pb-scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-pb-border-strong) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-pb-full);
+    background-color: var(--color-pb-border);
+  }
+
+  /* Darkens only while the pointer is in the scroll area, so a resting panel has no visible gutter
+   * at all. */
+  &:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-pb-border-strong);
+  }
+}
+
+/*
+ * Keyboard hint chrome, for a `<kbd>` next to a control that has a shortcut.
+ *
+ * A utility rather than a copied class list because it appears in the search bar and in the
+ * quick-actions menu, and the two looked subtly different when each spelled it out.
+ */
+@utility pb-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-width: 1.25rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: var(--radius-pb-sm);
+  border: var(--pb-border-width) solid var(--color-pb-border);
+  background-color: var(--color-pb-surface-sunken);
+  color: var(--color-pb-text-secondary);
+  font-family: inherit;
+  font-size: var(--text-pb-overline);
+  font-weight: 600;
+  line-height: 1.4;
+  /* The glyphs inside are symbols and single letters of very different widths; without this a row of
+   * hints has ragged boxes. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * Tinted rounded square behind a leading icon, in a list of mixed kinds.
+ *
+ * Pair with a tone class, which supplies the colours. This is for the notification feed, where a bare
+ * icon at body size disappears into the text it labels — the tile gives each row a fixed optical
+ * anchor so the list scans as rows rather than as a paragraph, and it carries severity with a shape
+ * as well as a hue.
+ */
+@utility pb-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-pb-md);
+  border: var(--pb-border-width) solid transparent;
+}
+
+/*
+ * A tick drawing itself.
+ *
+ * For the moment something succeeded. The stroke is animated rather than faded in, because a mark
+ * that *draws* reads as a thing that just happened, while a mark that appears reads as a thing that
+ * was always there and you only noticed now — which is precisely the wrong impression for a
+ * confirmation.
+ *
+ * Requires `pathLength="1"` on the path so the dash values are unit-independent; the alternative is
+ * measuring the geometry in JavaScript, which for a static tick is a script running to discover a
+ * constant.
+ *
+ * The scale on the surrounding tile is what carries the animation for anyone who has motion reduced —
+ * `prefers-reduced-motion` drops the movement and leaves the tick simply present, which is the state
+ * that matters.
+ */
+@utility pb-tick {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: pb-tick var(--duration-pb-slow) var(--ease-pb-out) 60ms both;
+}
+
+@keyframes pb-tick {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-tick {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/*
+ * A page arriving. **Opacity only, and that is not a stylistic choice.**
+ *
+ * The first version faded and rose 8px. It looked better and it broke every `position: fixed` element
+ * inside a routed page — the inventory FAB measured 7818px down the document and the POS floating
+ * cart pill sat at 2378px on an 844px viewport.
+ *
+ * The mechanism is worth stating, because it is invisible in review and survives a passing build: a
+ * transform on an ancestor makes that ancestor the **containing block** for fixed descendants. With
+ * `animation-fill-mode: both` the end state stays applied, and `transform: none` in a keyframe
+ * computes to the identity matrix rather than to `none` — so the wrapper kept a transform *forever*,
+ * not just for the 200ms it animated. Every fixed child inside the page was then positioned against a
+ * full-height wrapper instead of the viewport.
+ *
+ * Opacity creates no containing block. Neither would `filter`, `perspective`, `will-change: transform`,
+ * `contain: paint` or `backdrop-filter` be safe here, for the same reason — so this animation is
+ * deliberately restricted to the one property that cannot cause it. It still composites on the GPU
+ * and still costs no layout.
+ *
+ * There is no exit animation. Angular's router destroys the outgoing component immediately, so
+ * animating it out means keeping a dead page mounted over a live one — delaying the new screen to
+ * decorate the old, exactly backwards for an app someone uses all day.
+ */
+@utility pb-page-in {
+  animation: pb-page-in var(--duration-pb-base) var(--ease-pb-out) both;
+}
+
+@keyframes pb-page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-page-in {
+    animation: none;
+  }
+}
+
+/*
+ * A quick scale-up, for a number that just changed.
+ *
+ * Built for the POS quantity badge, which is the entire feedback mechanism for "did that tap
+ * register" — the cashier is looking at the card, not the cart. A colour change is too subtle to
+ * catch peripherally and a slide moves the digit you are trying to read; a 140ms pop is noticed
+ * without being watched.
+ *
+ * The overshoot is what makes it read as a response rather than a transition. `both` holds the end
+ * state, so a badge that animates on creation does not flicker back to its start.
+ */
+@utility pb-pop {
+  animation: pb-pop var(--duration-pb-fast) var(--ease-pb-spring) both;
+}
+
+@keyframes pb-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-pop {
+    animation: none;
+  }
+}
+
+/*
+ * A cart line arriving.
+ *
+ * Rises rather than sliding in from the side: the line is appended to a vertical list, and a
+ * horizontal entry reads as a different kind of change from "one more row". Shorter than
+ * `pb-fade-in` because at a counter this happens every tap, and an animation you see forty times a
+ * shift has to be brief enough to stop registering.
+ */
+@utility pb-line-in {
+  animation: pb-line-in var(--duration-pb-fast) var(--ease-pb-out) both;
+}
+
+@keyframes pb-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-line-in {
+    animation: none;
+  }
+}
+
+/*
+ * A QR code arriving.
+ *
+ * Scales up from 92% as it fades, which is the one animation on the payment sheet the *customer*
+ * sees — they are looking at the screen waiting for something to scan, and a code that appears
+ * instantly is indistinguishable from one that was always there and they missed. The growth says
+ * "this just became ready".
+ *
+ * Slower than the shell's transitions (240ms rather than 140) because it is watched rather than
+ * glanced at, and it happens once per order. `both` holds the end state so the code does not
+ * flicker back to 92% after settling.
+ *
+ * A transform is safe here: this element has no fixed-position descendants, which is the constraint
+ * that rules transforms out for the routed page wrapper.
+ */
+@utility pb-qr-in {
+  animation: pb-qr-in var(--duration-pb-slow) var(--ease-pb-out) both;
+}
+
+@keyframes pb-qr-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-qr-in {
+    animation: none;
+  }
+}
+
+/*
+ * The success moment: a disc that springs in, once.
+ *
+ * For the panel that replaces the payment sheet's contents when an order is saved. The overshoot is
+ * the point — a mark that settles *past* its size and back reads as something that happened, where
+ * a fade reads as something being revealed. At a counter that difference is the difference between
+ * "it worked" and "is it still thinking".
+ *
+ * Paired with `pb-tick` on the checkmark inside it, which draws itself over the same beat.
+ */
+@utility pb-success-pop {
+  animation: pb-success-pop var(--duration-pb-slow) var(--ease-pb-spring) both;
+}
+
+@keyframes pb-success-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-success-pop {
+    animation: none;
+  }
+}
+
+/*
+ * Content rising into place beneath the success mark.
+ *
+ * A short, staggered lift for the order number and the amount, so the panel assembles in the order
+ * it should be read rather than arriving as one block. The delay is set per element at the call
+ * site with an inline `animation-delay`.
+ */
+@utility pb-rise-in {
+  animation: pb-rise-in var(--duration-pb-base) var(--ease-pb-out) both;
+}
+
+@keyframes pb-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-rise-in {
+    animation: none;
+  }
+}
+
+/*
+ * Sideways entry, for a label revealed by the sidebar expanding.
+ *
+ * `pb-fade-in` rises 2px, which is right for content arriving into a static box and wrong here: the
+ * sidebar's own movement is horizontal, so a label that fades upward moves across the grain of it.
+ * Starting 4px to the left makes the labels read as being uncovered by the panel widening rather than
+ * as separate elements appearing on top of it.
+ */
+@utility pb-slide-in-x {
+  animation: pb-slide-in-x var(--duration-pb-base) var(--ease-pb-out) both;
+}
+
+@keyframes pb-slide-in-x {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-slide-in-x {
+    animation: none;
+  }
+}

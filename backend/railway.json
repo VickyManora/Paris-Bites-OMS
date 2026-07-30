@@ -1,0 +1,20 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "//": "`npm run build` runs `prisma generate` first, so the client always matches the schema being deployed.",
+    "buildCommand": "npm ci && npm run build"
+  },
+  "deploy": {
+    "//": "Migrations run at release time, not at build time: the build has no database access, and running them once per release avoids two instances migrating concurrently.",
+    "preDeployCommand": ["npx prisma migrate deploy"],
+    "startCommand": "node dist/main.js",
+
+    "healthcheckPath": "/api/v1/health/ready",
+    "healthcheckTimeout": 30,
+
+    "//2": "Set Railway's Root Directory to `backend`. DATABASE_URL should be the Neon POOLED string; migrations need the direct one.",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}

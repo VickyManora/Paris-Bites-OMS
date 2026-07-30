@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Paris Bites · Inventory Management</title>
+    <base href="/" />
+    <!--
+      viewport-fit=cover lets the layout reach under a notch and the home indicator, which is
+      what makes an installed POS look native rather than letterboxed. The panels that sit at
+      the bottom edge pay for it back with env(safe-area-inset-bottom) padding.
+
+      No maximum-scale or user-scalable=no: pinch-zoom is the accessibility escape hatch for
+      anyone who needs the total bigger than the design makes it, and disabling it to stop
+      double-tap zoom would be trading their reading for our polish.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Inventory management for Paris Bites." />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Set by ThemeService before first paint; this is the pre-hydration default. -->
+    <meta name="theme-color" content="#ffffff" />
+
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+    <!--
+      Progressive web app.
+
+      The manifest is what makes "Install to Home Screen" offered at all, and display:standalone
+      is what drops the browser chrome once it is. iOS reads none of the manifest for the status
+      bar, so the apple-* tags below are not duplicates — without them an installed icon on
+      iPhone launches in Safari with a visible address bar.
+    -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Paris Bites" />
+    <!-- black-translucent so the page paints under the status bar, matching viewport-fit=cover. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!--
+      Fonts. preconnect shaves a round trip off the TLS handshake.
+
+      Note the two different `display` strategies, which are not interchangeable:
+
+      - Inter uses `swap` — body text should appear immediately in a fallback face
+        rather than leaving the page blank while the webfont downloads.
+
+      - Material Symbols uses `block` — icons are LIGATURES, so `swap` renders the
+        ligature source text ("search", "menu", "more_vert") in the fallback font
+        until the webfont arrives. Words scattered where icons belong is far worse
+        than a brief blank space, and it is what users on a slow connection or behind
+        a proxy that blocks Google Fonts would otherwise see.
+
+      To drop the third-party dependency altogether, self-host both under
+      public/fonts and replace these links with @font-face rules. Worth doing if
+      Google Fonts is unacceptable for privacy reasons or the app must work offline.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
+      rel="stylesheet"
+    />
+  </head>
+
+  <body>
+    <pb-root></pb-root>
+  </body>
+</html>

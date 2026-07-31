@@ -31,6 +31,7 @@ Inventory management for a dessert business. Angular 20 SPA + Express/Prisma API
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)** — token design, roles/permissions, CSRF, login defences
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — layers, dependency rule, decisions and why
 - **[CONVENTIONS.md](./CONVENTIONS.md)** — naming and folder conventions
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** — deploying to Vercel, Render and Neon on free tiers, and what free costs you
 - **[TESTING.md](./TESTING.md)** — hand-testing walkthrough in dependency order, plus how to break the network paths
 - **[REVIEW.md](./REVIEW.md)** — production-readiness review: what was audited, fixed, and left alone
 

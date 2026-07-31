@@ -1,0 +1,78 @@
+# Render Blueprint for the Paris Bites API.
+#
+# Lets the backend be created from this file instead of a form: in Render, New → Blueprint → pick
+# this repo, and everything below is filled in already. That matters mostly for one field —
+# `rootDir` — which is the single most common way this deploy goes wrong. The repo is deliberately
+# not an npm workspace (the two apps install separately), so a build from the repo root finds no
+# package.json worth building and fails with a confusing missing-dependency error.
+#
+# The frontend is NOT here. It goes to Vercel, configured by `frontend/vercel.json`.
+#
+# Secrets are marked `sync: false`, which means Render prompts for them on first deploy and never
+# stores them in git. Nothing in this file is confidential.
+
+services:
+  - type: web
+    name: paris-bites-api
+    runtime: node
+    plan: free
+
+    # Closest free region to the shop. Render's free tier offers oregon, frankfurt and singapore;
+    # Mumbai is not among them, so Singapore is the shortest round trip from India.
+    region: singapore
+
+    rootDir: backend
+
+    # `npm ci` for a lockfile-exact install. `build` runs `prisma generate && tsc`, and the
+    # `postinstall` hook also runs `prisma generate` — harmless, and it means the client exists even
+    # if the build step is ever changed.
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
+    # Liveness, not readiness. `/live` reports only that the process is up; `/ready` opens a
+    # database connection, and pointing Render's restart trigger at that turns a brief Neon
+    # suspension into a restart loop. See the note in health.routes.ts.
+    healthCheckPath: /api/v1/health/live
+
+    envVars:
+      # --- Prompted on first deploy -------------------------------------------------
+      # The pooled Neon connection string — the hostname containing `-pooler`. The API opens its
+      # own pool, and a free Neon project's direct-connection budget will not survive a restarting
+      # container.
+      - key: DATABASE_URL
+        sync: false
+
+      # Two DIFFERENT random strings. Generate with: openssl rand -base64 48
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+
+      # Set to the Vercel URL once the frontend exists — exact origin, no trailing slash, comma
+      # separated for more than one. Left prompted rather than defaulted because the default
+      # (localhost) silently blocks every request from the real site.
+      - key: CORS_ORIGINS
+        sync: false
+      - key: WEB_URL
+        sync: false
+
+      # --- Fixed --------------------------------------------------------------------
+      # Does more than switch logging: it puts the refresh cookie into `SameSite=None; Secure`,
+      # which is required because the browser is on vercel.app while the API is on onrender.com.
+      # Without it, sign-in appears to work and every token refresh then fails silently.
+      - key: NODE_ENV
+        value: production
+
+      # engines requires >=22; Render does not default to it.
+      - key: NODE_VERSION
+        value: '22'
+
+      # Maharashtra. Decides CGST/SGST versus IGST on every supplier invoice, so it is a business
+      # fact rather than a deployment setting.
+      - key: BUSINESS_STATE_CODE
+        value: '27'
+
+      # One instance on the free plan, so the alert sweep is safe to leave enabled. If this ever
+      # scales past one, set this to 0 on all but one — see NOTIFICATIONS.md.
+      - key: ALERT_SCAN_INTERVAL_MINUTES
+        value: '15'

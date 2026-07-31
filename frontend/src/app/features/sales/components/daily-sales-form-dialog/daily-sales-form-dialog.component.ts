@@ -15,6 +15,18 @@ import {
   type DailySalesEntry,
 } from '../../models/daily-sales.model';
 import { DailySalesService } from '../../services/daily-sales.service';
+import { PosService } from '../../../pos/services/pos.service';
+import { PaymentMethod } from '../../../pos/models/pos.model';
+
+/** Money, to the paisa. Repeated arithmetic on floats is how a 299 becomes a 298.99999. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** A rupee figure for prose, not for a table — no alignment concerns, so no fixed decimals. */
+function inr(value: number): string {
+  return `\u20b9${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+}
 
 /** `entry` present means correct an existing day; absent means record a new one. */
 export interface DailySalesFormDialogData {
@@ -53,11 +65,7 @@ export interface DailySalesFormDialogData {
     ...MATERIAL_FORM_IMPORTS,
   ],
   template: `
-    <pb-dialog-shell
-      [title]="dialogTitle()"
-      subtitle="One entry per trading day"
-      icon="sales"
-    >
+    <pb-dialog-shell [title]="dialogTitle()" subtitle="One entry per trading day" icon="sales">
       @if (formError(); as message) {
         <pb-inline-alert slot="error" [message]="message" />
       }
@@ -97,6 +105,22 @@ export interface DailySalesFormDialogData {
           />
         }
 
+        <!--
+          Where the walk-in figures came from, stated rather than left to be inferred.
+
+          A field that silently fills itself is worse than an empty one: the user cannot tell whether
+          they are confirming the till or reading their own earlier entry, and the whole value of the
+          declared figure rests on them knowing which. 'info' rather than 'success' — nothing has been
+          achieved yet, it is the starting point for a count.
+        -->
+        @if (prefilledFromTill() && counterTakings(); as till) {
+          <pb-inline-alert
+            tone="info"
+            title="Walk-in filled from the till"
+            [message]="tillMessage()"
+          />
+        }
+
         <div class="grid grid-cols-1 gap-pb-3 sm:grid-cols-2" formGroupName="amounts">
           @for (bucket of buckets; track bucket.key) {
             <mat-form-field subscriptSizing="dynamic">
@@ -133,7 +157,20 @@ export interface DailySalesFormDialogData {
           </p>
         }
 
-        @if (isEditing()) {
+        <!--
+          Completing a day says so instead of asking why. Adding Zomato once the platform settles
+          contradicts nothing that was recorded, and a mandatory "why is it changing?" on the normal
+          evening routine trains people to type a character to get past it.
+        -->
+        @if (isEditing() && !isCorrecting() && filledLabels().length > 0) {
+          <pb-inline-alert
+            tone="success"
+            title="Completing the day"
+            [message]="completionMessage()"
+          />
+        }
+
+        @if (isCorrecting()) {
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>Why is it changing?</mat-label>
             <input matInput formControlName="reason" maxlength="300" />
@@ -161,7 +198,7 @@ export interface DailySalesFormDialogData {
       </button>
       <pb-submit-button
         slot="actions"
-        [label]="isEditing() ? 'Save correction' : 'Record day'"
+        [label]="submitLabel()"
         icon="check"
         [busy]="saving()"
         [disabled]="checkingDate() || total() <= 0"
@@ -174,6 +211,7 @@ export interface DailySalesFormDialogData {
 export class DailySalesFormDialogComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly service = inject(DailySalesService);
+  private readonly pos = inject(PosService);
   private readonly dialogRef = inject(MatDialogRef<DailySalesFormDialogComponent, DailySalesEntry>);
   private readonly data = inject<DailySalesFormDialogData>(MAT_DIALOG_DATA);
 
@@ -188,6 +226,24 @@ export class DailySalesFormDialogComponent {
   protected readonly switchedToEdit = signal(false);
   protected readonly formError = signal<string | null>(null);
 
+  /**
+   * What the till says the counter took on the chosen day, once it has been read.
+   *
+   * Null means "no figure to offer" and covers every reason for that: the request failed, the
+   * caller cannot see POS data, the day had no counter orders, or the summary came back scoped to
+   * one operator. It is deliberately one signal rather than a loading/error/value trio — nothing in
+   * this dialog behaves differently between those cases, because a prefill that cannot be offered
+   * is simply an empty field.
+   */
+  protected readonly counterTakings = signal<{
+    readonly cash: number;
+    readonly online: number;
+    readonly orders: number;
+  } | null>(null);
+
+  /** True once the till figures have actually been written into the fields. */
+  protected readonly prefilledFromTill = signal(false);
+
   protected readonly isEditing = computed(() => this.editing() !== null);
 
   /**
@@ -200,6 +256,39 @@ export class DailySalesFormDialogComponent {
   protected readonly dialogTitle = computed(() =>
     this.isEditing() ? 'Correct the day' : "Record the day's sales",
   );
+
+  /**
+   * The submit label names what is about to happen.
+   *
+   * Three states, not two: recording a fresh day, completing one that is already recorded, and
+   * correcting a figure. "Save correction" on a day where nothing is being corrected was the
+   * misleading case.
+   */
+  protected readonly submitLabel = computed(() => {
+    if (!this.isEditing()) {
+      return 'Record day';
+    }
+
+    return this.isCorrecting() ? 'Save correction' : 'Save';
+  });
+
+  protected readonly tillMessage = computed(() => {
+    const till = this.counterTakings();
+
+    if (till === null) {
+      return '';
+    }
+
+    const orders = `${till.orders} counter ${till.orders === 1 ? 'order' : 'orders'}`;
+
+    return `${orders} rang up ${inr(till.cash)} cash and ${inr(till.online)} online. Count the drawer and correct the cash figure if it differs.`;
+  });
+
+  protected readonly completionMessage = computed(() => {
+    const labels = this.filledLabels();
+
+    return `Adding ${labels.join(' and ')} to a day that was already recorded. No reason needed — nothing recorded is changing.`;
+  });
 
   protected readonly form = this.formBuilder.nonNullable.group({
     entryDate: [this.data.entry?.entryDate ?? this.today, [Validators.required]],
@@ -218,6 +307,11 @@ export class DailySalesFormDialogComponent {
   /** Recomputed from the raw form value, so it follows every keystroke. */
   protected readonly total = signal(this.sumAmounts());
 
+  /** The raw amounts as a signal, so the correcting/completing computeds track typing. */
+  private readonly amountValues = signal<Record<string, number>>(
+    this.form.controls.amounts.getRawValue(),
+  );
+
   protected readonly formattedTotal = computed(
     () =>
       `₹${this.total().toLocaleString('en-IN', {
@@ -228,13 +322,93 @@ export class DailySalesFormDialogComponent {
 
   constructor() {
     if (this.data.entry !== undefined) {
-      this.requireReason();
+      this.applyReasonRule();
       // The date of an existing day is not up for editing: changing it would silently
       // move a day's takings, and "this is the wrong date" is a delete-and-re-enter.
       this.form.controls.entryDate.disable();
     }
 
-    this.form.controls.amounts.valueChanges.subscribe(() => this.total.set(this.sumAmounts()));
+    this.form.controls.amounts.valueChanges.subscribe(() => {
+      this.total.set(this.sumAmounts());
+      this.amountValues.set(this.form.controls.amounts.getRawValue());
+      this.applyReasonRule();
+    });
+
+    /*
+     * A new day starts from the till rather than from zero. Correcting an existing day does not:
+     * overwriting stored figures with the till's would destroy the very thing the stored figure is
+     * for, which is somebody's independent count.
+     */
+    if (this.data.entry === undefined) {
+      this.loadCounterTakings(this.form.controls.entryDate.value);
+    }
+  }
+
+  /**
+   * Reads the day's counter takings and offers them as a starting point.
+   *
+   * ## Why this is a prefill and not the answer
+   *
+   * Declared sales and POS orders are two records of the same walk-in trade, and the app compares
+   * them rather than adding them — the dashboard ships the variance. Writing the till's figure
+   * straight in would make that comparison identical by construction and it would stop detecting
+   * anything: an order rung up wrong, an order never rung up at all, a short drawer. So the fields
+   * stay editable and the hint says where the number came from, which keeps the cash count a real
+   * count while removing the retyping.
+   *
+   * ## The scope guard is load-bearing
+   *
+   * `/pos/summary` answers within the caller's permission: a manager sees only their own orders and
+   * the payload says so with `scope: 'own'`. Prefilling from that would seed a whole day's declared
+   * takings with one operator's shift and look authoritative doing it — a silent under-report, which
+   * is worse than an empty field. Only `all` is offered.
+   *
+   * A failure is swallowed on purpose. This is a convenience on top of a form that worked before it
+   * existed; an error banner about the till would be noise on a screen whose job is entering a
+   * figure the user is holding in their hand.
+   */
+  private loadCounterTakings(date: string): void {
+    this.counterTakings.set(null);
+    this.prefilledFromTill.set(false);
+
+    if (date.length === 0) {
+      return;
+    }
+
+    this.pos.summary(date).subscribe({
+      next: (day) => {
+        if (day.scope !== 'all' || day.revenue <= 0) {
+          return;
+        }
+
+        const cash = round2(day.byPaymentMethod[PaymentMethod.CASH]);
+        /* Card is folded into online because the declared buckets have no card of their own — the
+           cart takes UPI against a printed QR, and a card total would have nowhere to land. */
+        const online = round2(
+          day.byPaymentMethod[PaymentMethod.UPI] + day.byPaymentMethod[PaymentMethod.CARD],
+        );
+
+        this.counterTakings.set({ cash, online, orders: day.paidCount });
+
+        /* Only into empty fields. By the time this resolves the user may already have typed, and
+           overwriting what somebody entered is never the friendlier behaviour. */
+        const walkInCash = this.form.controls.amounts.get('WALK_IN:CASH');
+        const walkInOnline = this.form.controls.amounts.get('WALK_IN:ONLINE');
+        let applied = false;
+
+        if (walkInCash !== null && Number(walkInCash.value) === 0 && cash > 0) {
+          walkInCash.setValue(cash);
+          applied = true;
+        }
+        if (walkInOnline !== null && Number(walkInOnline.value) === 0 && online > 0) {
+          walkInOnline.setValue(online);
+          applied = true;
+        }
+
+        this.prefilledFromTill.set(applied);
+      },
+      error: () => this.counterTakings.set(null),
+    });
   }
 
   /**
@@ -266,14 +440,26 @@ export class DailySalesFormDialogComponent {
         if (existing === null) {
           this.form.controls.reason.clearValidators();
           this.form.controls.reason.updateValueAndValidity();
+          /* A different unrecorded day has a different till total, so the offer is re-read
+             rather than carried over from the date the dialog opened on. */
+          this.form.controls.amounts.reset(
+            Object.fromEntries(SALES_BUCKETS.map((b) => [b.key, 0])),
+          );
+          this.loadCounterTakings(date);
           return;
         }
+
+        /* Switching to correcting drops the till offer: from here the stored figures are the
+           subject, and a prefill hint pointing at fields the user did not fill would misdescribe
+           where those numbers came from. */
+        this.counterTakings.set(null);
+        this.prefilledFromTill.set(false);
 
         this.form.controls.amounts.patchValue(
           Object.fromEntries(SALES_BUCKETS.map((b) => [b.key, existing.amounts[b.key] ?? 0])),
         );
         this.form.controls.notes.setValue(existing.notes ?? '');
-        this.requireReason();
+        this.applyReasonRule();
       },
       // A failed lookup must not block entry: the server's unique index still refuses a
       // genuine duplicate, so the worst case is the conflict the pre-check was avoiding.
@@ -305,7 +491,9 @@ export class DailySalesFormDialogComponent {
         : this.service.update(editing.id, {
             notes: notes.length === 0 ? undefined : notes,
             amounts,
-            reason: this.form.controls.reason.value.trim(),
+            /* Omitted when completing, so the server writes its own "Added Zomato" note rather
+               than storing an empty string as somebody's stated reason. */
+            reason: this.isCorrecting() ? this.form.controls.reason.value.trim() : undefined,
           });
 
     request$.subscribe({
@@ -325,9 +513,84 @@ export class DailySalesFormDialogComponent {
     this.dialogRef.close();
   }
 
-  private requireReason(): void {
-    this.form.controls.reason.setValidators([Validators.required, Validators.minLength(3)]);
-    this.form.controls.reason.updateValueAndValidity();
+  /**
+   * Which buckets already held a figure, for the completing-versus-correcting rule.
+   *
+   * Recomputed from `editing()` rather than captured once, because the dialog can switch into
+   * correcting a different day after a date change.
+   */
+  private readonly recordedBuckets = computed(() => {
+    const entry = this.editing();
+
+    if (entry === null) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      SALES_BUCKETS.filter((bucket) => (entry.amounts[bucket.key] ?? 0) > 0).map((b) => b.key),
+    );
+  });
+
+  /**
+   * True when this edit changes a figure that was already recorded.
+   *
+   * Mirrors `classifyChange` on the server, and the server remains the authority — this copy exists
+   * so the reason field appears and disappears as the user types rather than after a rejected
+   * submit. Filling an empty bucket is completing the day; altering or clearing a bucket that held
+   * money is correcting it.
+   */
+  protected readonly isCorrecting = computed(() => {
+    const entry = this.editing();
+
+    if (entry === null) {
+      return false;
+    }
+
+    const values = this.amountValues();
+    const recorded = this.recordedBuckets();
+
+    return SALES_BUCKETS.some((bucket) => {
+      if (!recorded.has(bucket.key)) {
+        return false;
+      }
+
+      return round2(Number(values[bucket.key] ?? 0)) !== round2(entry.amounts[bucket.key] ?? 0);
+    });
+  });
+
+  /** The buckets being filled for the first time, so the dialog can say what it is doing. */
+  protected readonly filledLabels = computed(() => {
+    const entry = this.editing();
+
+    if (entry === null) {
+      return [];
+    }
+
+    const values = this.amountValues();
+    const recorded = this.recordedBuckets();
+
+    return SALES_BUCKETS.filter(
+      (bucket) => !recorded.has(bucket.key) && Number(values[bucket.key] ?? 0) > 0,
+    ).map((bucket) => bucket.shortLabel);
+  });
+
+  /**
+   * Attaches the reason validator only when one is genuinely required.
+   *
+   * Driven from `valueChanges` as well as the date lookup: a user who opens a recorded day, types
+   * a Zomato figure, then also edits the cash total has moved from completing to correcting, and the
+   * field has to appear at that moment rather than on submit.
+   */
+  private applyReasonRule(): void {
+    const control = this.form.controls.reason;
+
+    if (this.isCorrecting()) {
+      control.setValidators([Validators.required, Validators.minLength(3)]);
+    } else {
+      control.clearValidators();
+    }
+
+    control.updateValueAndValidity({ emitEvent: false });
   }
 
   /** Only the buckets that took money — a zero is not a line worth storing. */

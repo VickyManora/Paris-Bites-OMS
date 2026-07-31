@@ -1,5 +1,9 @@
 import type { DailySalesEntry } from '../../../domain/entities/daily-sales-entry.entity.js';
-import { DAILY_SALES_BUCKETS, bucketKey } from '../../../domain/enums/sales.enum.js';
+import {
+  DAILY_SALES_BUCKETS,
+  SALES_CHANNEL_LABELS,
+  bucketKey,
+} from '../../../domain/enums/sales.enum.js';
 import { BusinessRuleError, ConflictError, NotFoundError } from '../../../domain/errors/domain-error.js';
 import type { IAuditLogRepository } from '../../../domain/repositories/audit-log.repository.js';
 import type {
@@ -170,6 +174,95 @@ export class RecordDailySalesUseCase implements IUseCase<RecordDailySalesInput, 
 }
 
 /**
+ * What an update does to the figures already stored.
+ *
+ * `completing` — every change fills a bucket that held nothing. This is the ordinary evening at
+ * this shop: the counter total goes in at close, and Zomato is added later once the platform
+ * settles. Nothing is being contradicted, so there is nothing to explain.
+ *
+ * `correcting` — a bucket that already held a figure now holds a different one, including being
+ * cleared back to zero. That contradicts what was recorded and is exactly the case the revision
+ * trail exists for, so a reason stays mandatory.
+ *
+ * `unchanged` — the amounts are identical; only notes moved.
+ *
+ * Reducing a figure is always a correction even though the arithmetic is the same shape as filling
+ * one, because "Zomato was 1,240 and is now 0" is a claim about a figure someone already recorded.
+ */
+type SalesChangeKind = 'completing' | 'correcting' | 'unchanged';
+
+interface SalesChange {
+  readonly kind: SalesChangeKind;
+  /** Buckets that went from nothing to something, for the auto-written revision note. */
+  readonly filled: readonly string[];
+}
+
+function classifyChange(
+  existing: DailySalesEntry,
+  lines: readonly DailySalesLineData[],
+): SalesChange {
+  const before = new Map<string, number>();
+
+  for (const line of existing.lines) {
+    const key = bucketKey(line.channel, line.paymentMode);
+    before.set(key, (before.get(key) ?? 0) + line.amount);
+  }
+
+  const after = new Map<string, number>();
+
+  for (const line of lines) {
+    const key = bucketKey(line.channel, line.paymentMode);
+    after.set(key, (after.get(key) ?? 0) + line.amount);
+  }
+
+  const filled: string[] = [];
+  let altered = false;
+
+  /*
+   * The union of both sides. Iterating only the submitted lines would miss a bucket that was
+   * dropped from the payload — which is a reduction to zero, and the single most important case to
+   * classify as a correction rather than let through unexplained.
+   */
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const previous = before.get(key) ?? 0;
+    const next = after.get(key) ?? 0;
+
+    if (previous === next) {
+      continue;
+    }
+
+    if (previous === 0) {
+      filled.push(key);
+    } else {
+      altered = true;
+    }
+  }
+
+  if (altered) {
+    return { kind: 'correcting', filled };
+  }
+
+  return { kind: filled.length > 0 ? 'completing' : 'unchanged', filled };
+}
+
+/** e.g. "Added Zomato, Swiggy" — the revision note when a day is completed rather than corrected. */
+function completionNote(filled: readonly string[]): string {
+  const labels = [
+    ...new Set(
+      filled.map((key) => {
+        const bucket = DAILY_SALES_BUCKETS.find(
+          (candidate) => bucketKey(candidate.channel, candidate.paymentMode) === key,
+        );
+
+        return bucket === undefined ? key : SALES_CHANNEL_LABELS[bucket.channel];
+      }),
+    ),
+  ];
+
+  return `Added ${labels.join(', ')}`;
+}
+
+/**
  * Corrects a day already recorded.
  *
  * A reason is required. Sales figures are the numbers the business is judged on, and one
@@ -185,19 +278,39 @@ export class UpdateDailySalesUseCase implements IUseCase<UpdateDailySalesInput, 
 
   async execute(input: UpdateDailySalesInput): Promise<DailySalesEntryDto> {
     const lines = toLines(input.amounts);
-    const reason = input.reason.trim();
+    const supplied = input.reason?.trim() ?? '';
 
-    if (reason.length === 0) {
-      throw new BusinessRuleError('Say why the figure changed.', {
-        reason: ['A reason is required when correcting a day.'],
-      });
-    }
-
+    /*
+     * The existing figures are read before the reason is judged, because whether a reason is
+     * required is a fact about them — see `classifyChange`. The previous version demanded one
+     * unconditionally, which made "Zomato settled, add it to Tuesday" ask the user to explain a
+     * figure they were not changing.
+     */
     const existing = await this.sales.findById(input.id);
 
     if (existing === null) {
       throw new NotFoundError('Sales entry', input.id);
     }
+
+    const change = classifyChange(existing, lines);
+
+    if (change.kind === 'correcting' && supplied.length === 0) {
+      throw new BusinessRuleError('Say why the figure changed.', {
+        reason: ['A reason is required when correcting a figure that was already recorded.'],
+      });
+    }
+
+    /*
+     * A revision always carries a note, even when the user was not asked for one: the trail is
+     * read months later by someone reconstructing a day, and a blank entry against a changed total
+     * is the thing that makes them distrust the whole history. A supplied reason always wins.
+     */
+    const note =
+      supplied.length > 0
+        ? supplied
+        : change.kind === 'completing'
+          ? completionNote(change.filled)
+          : 'Notes updated';
 
     const previousTotal = existing.totalAmount;
 
@@ -205,7 +318,7 @@ export class UpdateDailySalesUseCase implements IUseCase<UpdateDailySalesInput, 
       notes: input.notes?.trim(),
       lines,
       actorId: input.actorId,
-      note: reason,
+      note,
     });
 
     await this.auditLog.record({
@@ -220,17 +333,23 @@ export class UpdateDailySalesUseCase implements IUseCase<UpdateDailySalesInput, 
         from: previousTotal,
         to: entry.totalAmount,
         revision: entry.revision,
-        reason,
+        reason: note,
+        /* Completing and correcting are different events with the same shape; an auditor
+           reading only this log should not have to diff the figures to tell them apart. */
+        change: change.kind,
       },
     });
 
-    this.logger.info('Daily sales corrected', {
-      entryId: entry.id,
-      entryDate: entry.entryDateIso,
-      from: previousTotal,
-      to: entry.totalAmount,
-      actorId: input.actorId,
-    });
+    this.logger.info(
+      change.kind === 'completing' ? 'Daily sales completed' : 'Daily sales corrected',
+      {
+        entryId: entry.id,
+        entryDate: entry.entryDateIso,
+        from: previousTotal,
+        to: entry.totalAmount,
+        actorId: input.actorId,
+      },
+    );
 
     return DailySalesMapper.toDto(entry);
   }

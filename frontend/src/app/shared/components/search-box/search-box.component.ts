@@ -58,7 +58,7 @@ import { IconComponent } from '../icon/icon.component';
         just its edge.
       -->
       <div
-        class="group flex h-10 items-center gap-pb-2 rounded-pb-lg border border-pb-border bg-pb-surface-sunken px-pb-3 transition-[border-color,box-shadow,background-color] duration-pb-fast ease-pb-out focus-within:border-pb-interactive focus-within:bg-pb-surface focus-within:shadow-pb-focus hover:border-pb-border-strong motion-reduce:transition-none"
+        class="group flex h-11 items-center gap-pb-2 rounded-pb-lg border border-pb-border bg-pb-surface-sunken px-pb-3 transition-[border-color,box-shadow,background-color] duration-pb-fast ease-pb-out focus-within:border-pb-interactive focus-within:bg-pb-surface focus-within:shadow-pb-focus hover:border-pb-border-strong motion-reduce:transition-none"
       >
         <!-- Tints to the interaction colour while the field has focus, so the whole control
              confirms the shortcut landed rather than only the border moving a shade. -->
@@ -85,7 +85,7 @@ import { IconComponent } from '../icon/icon.component';
           <button
             type="button"
             aria-label="Clear search"
-            class="grid h-6 w-6 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-sm border-0 bg-transparent text-pb-text-secondary transition-colors duration-pb-instant hover:bg-pb-hover-surface hover:text-pb-text"
+            class="grid h-8 w-8 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-sm border-0 bg-transparent text-pb-text-secondary transition-colors duration-pb-instant hover:bg-pb-hover-surface hover:text-pb-text"
             (click)="clear()"
           >
             <pb-icon name="close" [size]="14" />

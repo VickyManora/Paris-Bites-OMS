@@ -22,6 +22,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:seed:dev-users": "tsx prisma/seed-dev-users.ts",
     "prisma:seed:inventory": "tsx prisma/seed-inventory.cli.ts",
     "db:reset": "prisma migrate reset --force",
     "postinstall": "prisma generate",

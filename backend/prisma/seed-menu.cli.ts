@@ -47,7 +47,8 @@ seedMenu(prisma)
       `Menu seeded: ${String(result.categoriesCreated)} categories created, ` +
         `${String(result.categoriesUpdated)} updated; ` +
         `${String(result.productsCreated)} products created, ` +
-        `${String(result.productsUpdated)} updated.\n`,
+        `${String(result.productsUpdated)} updated, ` +
+        `${String(result.productsRetired)} retired.\n`,
     );
   })
   .catch((error: unknown) => {

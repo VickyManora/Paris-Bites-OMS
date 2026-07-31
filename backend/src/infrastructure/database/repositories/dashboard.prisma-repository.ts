@@ -95,6 +95,7 @@ export class DashboardPrismaRepository implements IDashboardRepository {
       salesTrend,
       salesByChannel,
       unrecordedDays,
+      unrecordedConsumption,
       posToday,
       declaredWalkIn,
       topProducts,
@@ -349,6 +350,28 @@ export class DashboardPrismaRepository implements IDashboardRepository {
       `,
 
       /*
+       * The same anti-join for consumption sheets. See `unrecordedConsumptionDays`.
+       *
+       * Joined on `entry_date` rather than `created_at`: a sheet written up on Tuesday morning
+       * for Monday belongs to Monday, and matching on the timestamp would report Monday as
+       * missing and Tuesday as done — exactly backwards, and it would nag about a day somebody
+       * had already dealt with.
+       *
+       * `deleted_at IS NULL` matters here for the same reason it does above. A voided sheet is
+       * not a record of what was used, so a day whose only sheet was voided has to come back as
+       * unrecorded; without the predicate the anti-join would find the dead row and call the day
+       * done.
+       */
+      this.client.$queryRaw<{ day: Date }[]>`
+        SELECT d.day::date AS day
+        FROM generate_series(${from}::date, ${day}::date - 1, '1 day') AS d(day)
+        LEFT JOIN consumption_entries e
+          ON e.entry_date = d.day::date AND e.deleted_at IS NULL
+        WHERE e.id IS NULL
+        ORDER BY d.day DESC
+      `,
+
+      /*
        * Today at the counter.
        *
        * The payment split comes from `payments`, not from the order — a split order has two
@@ -439,6 +462,7 @@ export class DashboardPrismaRepository implements IDashboardRepository {
         lines: toNumber(consumptionToday[0]?.lines ?? 0),
         items: toNumber(consumptionToday[0]?.items ?? 0),
       },
+      unrecordedConsumptionDays: unrecordedConsumption.map((row) => toDateOnly(row.day)),
       topIngredients: topIngredients.map(
         (row): TopIngredientRow => ({
           itemId: row.item_id,

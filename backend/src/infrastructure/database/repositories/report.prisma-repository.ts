@@ -11,6 +11,8 @@ import {
 } from '../../../core/domain/enums/inventory.enum.js';
 import { GST_TREATMENT_LABELS, stateNameFor } from '../../../core/domain/enums/purchase.enum.js';
 import { TRANSFER_STATUS_LABELS } from '../../../core/domain/enums/stock-transfer.enum.js';
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../../core/domain/enums/pos.enum.js';
+import { MONEY_DECIMAL_PLACES } from '../../../core/domain/value-objects/money.js';
 import { MAX_EXPORT_ROWS, ReportId } from '../../../core/domain/enums/report.enum.js';
 import type {
   IReportRepository,
@@ -708,7 +710,19 @@ export class ReportPrismaRepository implements IReportRepository {
                 FROM sales_order_items li WHERE li.order_id = o.id) AS items,
                (SELECT coalesce(sum(li.quantity), 0)
                 FROM sales_order_items li WHERE li.order_id = o.id) AS quantity,
-               (SELECT string_agg(DISTINCT p.method::text, ', ')
+               /*
+                * Method **and amount**, one entry per tender.
+                *
+                * This was string_agg(DISTINCT p.method), which named the methods and dropped the
+                * figures — so a split order read "CASH, UPI" and the report could not answer the
+                * question it exists to answer: how much came in as cash. The amount is what makes
+                * a split reconcile against a till.
+                *
+                * Ordered by method so two orders paid the same way read identically, and
+                * string_agg over the rows rather than DISTINCT because two tenders of the same
+                * method cannot occur — checkTenders refuses them.
+                */
+               (SELECT string_agg(p.method::text || ':' || p.amount::text, '|' ORDER BY p.method)
                 FROM payments p WHERE p.order_id = o.id) AS payment_method
         ${joins} ${where}
         ${this.order(filters, {
@@ -752,7 +766,7 @@ export class ReportPrismaRepository implements IReportRepository {
       items: text(row['items'], 'No items'),
       quantity: num(row['quantity']),
       status: this.orderStatusLabel(String(row['status'])),
-      paymentMethod: text(row['payment_method'], 'Unpaid'),
+      paymentMethod: this.paymentSummary(row['payment_method']),
       discountAmount: num(row['discount_amount']),
       grandTotal: num(row['grand_total']),
       placedBy: text(row['placed_by'], 'Unknown'),
@@ -770,6 +784,41 @@ export class ReportPrismaRepository implements IReportRepository {
       },
       chart: null,
     };
+  }
+
+  /**
+   * Renders the tenders behind one order.
+   *
+   * `Cash ₹200.00 + UPI ₹247.00` for a split, `Cash` alone for a single method, `Unpaid` for none.
+   *
+   * **The amount is omitted when there is only one tender**, because it would restate the order
+   * total in the column beside it — every row of a single-method report would carry the same number
+   * twice, which is noise in a printed report and an extra thing to reconcile in a spreadsheet. A
+   * split is the only case where the breakdown says something the Total column does not.
+   *
+   * Formatted here rather than in SQL: the labels belong to the domain (`PAYMENT_METHOD_LABELS`),
+   * and building currency strings in Postgres puts locale decisions in a query.
+   */
+  private paymentSummary(raw: unknown): string {
+    if (typeof raw !== 'string' || raw.length === 0) {
+      return 'Unpaid';
+    }
+
+    const tenders = raw.split('|').map((entry) => {
+      const [method = '', amount = ''] = entry.split(':');
+      return {
+        label: PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method,
+        amount: Number(amount),
+      };
+    });
+
+    if (tenders.length === 1) {
+      return tenders[0]?.label ?? 'Unpaid';
+    }
+
+    return tenders
+      .map((tender) => `${tender.label} ₹${tender.amount.toFixed(MONEY_DECIMAL_PLACES)}`)
+      .join(' + ');
   }
 
   /** `PENDING_PAYMENT` reads badly in a printed report. */

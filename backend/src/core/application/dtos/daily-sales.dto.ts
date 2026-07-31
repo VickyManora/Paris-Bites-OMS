@@ -93,8 +93,11 @@ export interface UpdateDailySalesInput extends RequestContext {
   readonly id: string;
   readonly notes?: string | undefined;
   readonly amounts: readonly DailySalesAmountInput[];
-  /** Why the figure changed. Required — a silent correction is not auditable. */
-  readonly reason: string;
+  /**
+   * Why the figure changed. Required for a correction, absent when merely completing a day —
+   * see `UpdateDailySalesUseCase`.
+   */
+  readonly reason?: string | undefined;
 }
 
 export interface ListDailySalesInput {

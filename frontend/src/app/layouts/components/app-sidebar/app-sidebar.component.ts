@@ -47,54 +47,19 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     items: [{ label: 'Dashboard', icon: 'dashboard', route: '/dashboard', exact: true }],
   },
   {
-    title: 'Stock',
-    items: [
-      // Gated on the same permission the route requires, so the menu never offers a
-      // link that leads straight to the "access denied" page.
-      {
-        label: 'Inventory',
-        icon: 'inventory',
-        route: '/inventory',
-        permission: Permission.PRODUCT_READ,
-      },
-      {
-        label: 'Transfers',
-        icon: 'transfers',
-        route: '/transfers',
-        permission: Permission.TRANSFER_READ,
-      },
-      {
-        label: 'Consumption',
-        icon: 'consumption',
-        route: '/consumption',
-        permission: Permission.STOCK_READ,
-      },
-    ],
-  },
-  {
-    // Buying is its own section rather than a third entry under Stock: purchases and
-    // suppliers answer "what did we pay and to whom", which is a different question from
-    // "what is on the shelf" — even though recording a bill is what puts it there.
-    title: 'Buying',
-    items: [
-      {
-        label: 'Purchases',
-        icon: 'purchases',
-        route: '/purchases',
-        permission: Permission.PURCHASE_ORDER_READ,
-      },
-      {
-        label: 'Suppliers',
-        icon: 'suppliers',
-        route: '/suppliers',
-        permission: Permission.SUPPLIER_READ,
-      },
-    ],
-  },
-  {
-    // Selling is its own section rather than a third entry under Buying: money in and
-    // money out are different questions, and the daily figure is entered by a different
-    // person at a different time from a supplier invoice.
+    /*
+     * Selling is first, above Stock.
+     *
+     * Ordered by how often the screen is opened rather than by how the data flows. Stock came
+     * first while this was an inventory system that later grew a till; it is now a till that is
+     * backed by inventory. The person on the cart opens Point of sale at the start of every
+     * shift and returns to it between customers, so it is the one item that should never be
+     * scrolled to — and for a Store Manager, whose Buying and Analysis sections are now empty,
+     * it is the first link in the sidebar.
+     *
+     * Money in and money out stay separate sections: the daily figure is entered by a different
+     * person at a different time from a supplier invoice.
+     */
     title: 'Selling',
     items: [
       // First in the section: it is the screen the counter opens every shift.
@@ -112,6 +77,61 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: 'sales',
         route: '/sales',
         permission: Permission.SALE_READ,
+      },
+    ],
+  },
+  {
+    title: 'Stock',
+    items: [
+      // Gated on the same permission the route requires, so the menu never offers a
+      // link that leads straight to the "access denied" page.
+      {
+        label: 'Inventory',
+        icon: 'inventory',
+        route: '/inventory',
+        permission: Permission.PRODUCT_READ,
+      },
+      /*
+       * Consumption before Transfers, which is the order the work happens in.
+       *
+       * Recording what the cart used is a daily obligation; raising a transfer is what you do
+       * afterwards, once that record has shown you what has run down. Transfers led here
+       * previously only because both were added in one go.
+       */
+      {
+        label: 'Consumption',
+        icon: 'consumption',
+        route: '/consumption',
+        permission: Permission.STOCK_READ,
+      },
+      {
+        label: 'Transfers',
+        icon: 'transfers',
+        route: '/transfers',
+        permission: Permission.TRANSFER_READ,
+      },
+    ],
+  },
+  {
+    // Buying is its own section rather than a third entry under Stock: purchases and
+    // suppliers answer "what did we pay and to whom", which is a different question from
+    // "what is on the shelf" — even though recording a bill is what puts it there.
+    //
+    // Admin-only in practice: a Store Manager holds neither permission, so `visibleSections`
+    // drops this section whole for them.
+    title: 'Buying',
+    items: [
+      {
+        label: 'Purchases',
+        icon: 'purchases',
+        route: '/purchases',
+        permission: Permission.PURCHASE_ORDER_READ,
+      },
+      {
+        label: 'Suppliers',
+        icon: 'suppliers',
+        route: '/suppliers',
+        permission: Permission.SUPPLIER_READ,
       },
     ],
   },
@@ -493,13 +513,13 @@ export class AppSidebarComponent {
    * `no-underline` is load-bearing, not decoration: Tailwind's preflight is not loaded, so without
    * it every one of these links renders underlined.
    *
-   * `min-h-10` rather than a fixed height, so a label that has to wrap grows the pill instead of
+   * `min-h-11` rather than a fixed height, so a label that has to wrap grows the pill instead of
    * spilling out of it — the row is 40px for every label currently in the list, and stays correct
    * for one that is not.
    */
   protected readonly linkClass = computed(() => {
     const base =
-      'group relative mt-0.5 flex min-h-10 w-full items-center gap-pb-3 rounded-pb-lg px-pb-3 py-2 text-left text-pb-body text-pb-text-secondary no-underline transition-[background-color,color] duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
+      'group relative mt-0.5 flex min-h-11 w-full items-center gap-pb-3 rounded-pb-lg px-pb-3 py-2 text-left text-pb-body text-pb-text-secondary no-underline transition-[background-color,color] duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
     return this.collapsed() ? `${base} justify-center` : base;
   });
 

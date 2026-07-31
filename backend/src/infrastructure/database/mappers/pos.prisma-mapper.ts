@@ -110,6 +110,8 @@ export const PosPrismaMapper = {
       discountType: toDiscountType(row.discountType),
       discountValue: decimalToNumber(row.discountValue),
       discountAmount: decimalToNumber(row.discountAmount),
+      comboDiscountAmount: decimalToNumber(row.comboDiscountAmount),
+      comboCount: row.comboCount,
       discountReason: row.discountReason,
       grandTotal: decimalToNumber(row.grandTotal),
       notes: row.notes,

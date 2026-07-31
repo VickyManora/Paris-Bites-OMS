@@ -61,16 +61,37 @@ export const MENU: readonly MenuCategorySeed[] = [
     ],
   },
   {
-    name: 'Combos',
-    icon: '🍫',
+    /*
+     * Mini Bowls, in the display slot the retired Combos category left free.
+     *
+     * Its own category rather than an entry in Signature Bowls: at ₹69 against ₹149–169 it would
+     * read as a mispriced signature bowl sitting among them, and the POS renders categories as tabs
+     * so a separate one costs a single tap. One product today, and it is the obvious place for mini
+     * versions of the other flavours as they arrive.
+     *
+     * No `image` yet — the card falls back to the category emoji, which is why that fallback exists.
+     */
+    name: 'Mini Bowls',
+    icon: '🍨',
     displayOrder: 3,
-    products: [
-      // Both combo shots show two bowls from the tier they sell, which is the clearest way to
-      // photograph "any two" — a single bowl would look like one of the individual products.
-      { name: 'Any 2 Signature Bowls', price: 299 , image: '/products/any-2-signature-bowls.jpg' },
-      { name: 'Any 2 Premium Bowls', price: 399 , image: '/products/any-2-premium-bowls.jpg' },
-    ],
+    products: [{ name: 'Mini Bowl', price: 69 }],
   },
+  /*
+   * The Combos category is gone, and on purpose.
+   *
+   * "Any 2 Signature Bowls" and "Any 2 Premium Bowls" used to be products the cashier added by
+   * hand. That charged the right money and threw away the useful part: the order recorded *a
+   * combo* rather than *which two bowls went out*, so stock and the top-sellers report never saw
+   * the flavours, and the counter had to remember to switch to a different tab to ring one up.
+   *
+   * The offer now applies itself — see `COMBO_OFFER_POLICY` in `combo-pricing.ts`, which is the
+   * single source of truth for the pair prices. Ring up the two bowls the customer actually chose
+   * and the saving appears.
+   *
+   * The two product rows are **not deleted**: past orders reference them, and a receipt from last
+   * week has to keep reading correctly. `seed-menu` soft-deletes them so they leave the menu
+   * without leaving the database.
+   */
   {
     name: 'Belgian Waffles',
     icon: '🧇',
@@ -91,6 +112,47 @@ export const MENU: readonly MenuCategorySeed[] = [
       { name: 'Biscoff Bliss Waffle', price: 169 , image: '/products/biscoff-bliss-waffle.jpg' },
     ],
   },
+  {
+    /*
+     * Extras — charges that are not a dessert.
+     *
+     * Waffle packaging is ₹10 the cashier adds when a waffle is packed to go, rather than ₹10 folded
+     * into all six waffle prices. Two reasons it is a product and not a price rise:
+     *
+     * A dine-in waffle does not use a box, so raising the menu price would charge every customer for
+     * packaging most of them do not take. And as its own line the order records *how many waffles
+     * actually went out packed*, which is the figure that reconciles against the Waffle Box stock
+     * being drawn down at ₹5.50 a box — a price rise would hide that inside revenue.
+     *
+     * Sits last in the tab order because it is never the first thing anyone rings up.
+     */
+    name: 'Extras',
+    icon: '🥡',
+    displayOrder: 5,
+    products: [{ name: 'Waffle Packaging', price: 10 }],
+  },
+];
+
+/**
+ * Products that used to be on the menu and must now leave it.
+ *
+ * Removing a name from `MENU` is not enough on its own: the seed is deliberately non-destructive,
+ * so a product it stops seeing is simply one it stops updating — the row stays live and the POS
+ * keeps offering it. This list is the explicit instruction to retire one.
+ *
+ * **Soft-deleted, never deleted.** `sales_order_items` references products with `RESTRICT`, so a
+ * product that has ever been sold cannot be removed without erasing the record of selling it. A
+ * soft delete takes it off the menu — the menu query filters on `deletedAt` — while last week's
+ * receipt still reads correctly.
+ *
+ * Declared here rather than run as a one-off script so that every environment ends up in the same
+ * state. A database seeded from scratch never creates these; a database that already has them
+ * retires them on the next seed.
+ */
+export const RETIRED_PRODUCTS: readonly string[] = [
+  // Replaced by automatic "any 2" pricing — see the note where the Combos category used to be.
+  'Any 2 Signature Bowls',
+  'Any 2 Premium Bowls',
 ];
 
 /** Guards the seed against a menu edit that duplicates a name. */

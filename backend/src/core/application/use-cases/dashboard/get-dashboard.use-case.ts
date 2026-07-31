@@ -134,6 +134,7 @@ export class GetDashboardUseCase implements IUseCase<GetDashboardInput, Dashboar
       return {
         ...base,
         todaysConsumption: aggregates.todaysConsumption,
+        unrecordedConsumptionDays: aggregates.unrecordedConsumptionDays,
       };
     }
 
@@ -163,6 +164,7 @@ export class GetDashboardUseCase implements IUseCase<GetDashboardInput, Dashboar
       topProductsToday: aggregates.topProductsToday,
       // An admin also runs the kitchen on a quiet day, so this stays useful to them.
       todaysConsumption: aggregates.todaysConsumption,
+      unrecordedConsumptionDays: aggregates.unrecordedConsumptionDays,
     };
   }
 
@@ -245,13 +247,42 @@ export class GetDashboardUseCase implements IUseCase<GetDashboardInput, Dashboar
       });
     }
 
-    if (aggregates.purchasesMissingInvoice > 0) {
+    /*
+     * Admin-only, because `/purchases` is admin-only.
+     *
+     * A Store Manager no longer holds `PURCHASE_ORDER_READ`, so without this guard the task
+     * survives into their payload as a count they cannot act on and a link that answers 403 —
+     * the access-denied page reached by following the dashboard's own advice. Every task here
+     * carries the route where acting on it starts, which only means something if the reader can
+     * open it; a task whose route they are denied is worse than no task at all.
+     */
+    if (isAdmin && aggregates.purchasesMissingInvoice > 0) {
       tasks.push({
         key: 'missing-bills',
         label: 'Purchases without an attached bill',
         count: aggregates.purchasesMissingInvoice,
         route: '/purchases?hasInvoiceFile=false',
         severity: 'info',
+      });
+    }
+
+    /*
+     * A past day with no sheet, which is the one worth escalating.
+     *
+     * Ranked above today deliberately, and carrying `warning` where today carries `info`: today's
+     * sheet is still being worked on, while yesterday's is late and getting harder to fill in
+     * accurately by the hour. Nobody remembers what the cart used the day before last.
+     */
+    if (aggregates.unrecordedConsumptionDays.length > 0) {
+      const missing = aggregates.unrecordedConsumptionDays.length;
+
+      tasks.push({
+        key: 'unrecorded-consumption',
+        label:
+          missing === 1 ? 'Day without consumption recorded' : 'Days without consumption recorded',
+        count: missing,
+        route: '/consumption',
+        severity: 'warning',
       });
     }
 

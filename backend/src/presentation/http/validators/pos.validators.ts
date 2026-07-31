@@ -6,6 +6,7 @@ import {
   ALL_PAYMENT_METHODS,
 } from '../../../core/domain/enums/pos.enum.js';
 import { ALL_SALES_CHANNELS } from '../../../core/domain/enums/sales.enum.js';
+import { MONEY_MAX } from '../../../core/domain/value-objects/money.js';
 import { paginationQuerySchema, uuidSchema } from './common.validators.js';
 
 const dateOnlySchema = z
@@ -62,6 +63,11 @@ export const placeOrderSchema = z
         phone: z.string().trim().max(20).optional(),
       })
       .optional(),
+    /**
+     * The legacy single method, kept so a client that predates split payment keeps working.
+     *
+     * @deprecated Send `payments`.
+     */
     payment: z
       .object({
         // What may be taken, not what may be read: a request naming CARD is rejected.
@@ -69,6 +75,37 @@ export const placeOrderSchema = z
         reference: z.string().trim().max(60).optional(),
       })
       .optional(),
+    /**
+     * One entry per tender: `[{ method: 'CASH', amount: 200 }, { method: 'UPI', amount: 247 }]`.
+     *
+     * The shape is validated here; **whether the amounts add up to the order is not**, and cannot
+     * be — this layer has not priced the order yet. That check lives in `PlaceOrderUseCase`, which
+     * owns the total. The ceiling is the number of methods the counter may take, so a payload
+     * cannot arrive with forty tenders.
+     */
+    payments: z
+      .array(
+        z.object({
+          method: z.enum(ACCEPTED_PAYMENT_METHODS as [string, ...string[]]),
+          // Two decimal places, matching the stored scale. A third would be silently truncated by
+          // the column, so it is refused where the cashier can still see why.
+          amount: z
+            .number()
+            .positive()
+            .max(MONEY_MAX)
+            .refine((value) => Number.isInteger(Math.round(value * 100)) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+              message: 'Amounts are in rupees and paise — at most two decimal places.',
+            }),
+          reference: z.string().trim().max(60).optional(),
+        }),
+      )
+      .min(1)
+      .max(ACCEPTED_PAYMENT_METHODS.length)
+      .optional(),
+  })
+  .refine((body) => body.payment === undefined || body.payments === undefined, {
+    message: 'Send either payment or payments, not both.',
+    path: ['payments'],
   })
   .refine(
     (body) => body.discountType === 'NONE' || body.discountValue > 0,

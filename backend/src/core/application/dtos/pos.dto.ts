@@ -52,6 +52,14 @@ export interface OrderDto {
   readonly discountType: DiscountType;
   readonly discountValue: number;
   readonly discountAmount: number;
+  /**
+   * What the automatic "any 2" offers took off, and how many pairs matched.
+   *
+   * Exposed separately from `discountAmount` so a receipt can say "Combo saving ₹79" rather than
+   * folding the shop's own offer into a line that reads as staff discretion.
+   */
+  readonly comboDiscountAmount: number;
+  readonly comboCount: number;
   readonly discountReason: string | null;
   readonly grandTotal: number;
 

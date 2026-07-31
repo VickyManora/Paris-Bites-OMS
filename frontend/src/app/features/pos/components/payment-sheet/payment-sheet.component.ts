@@ -29,9 +29,28 @@ export interface PaymentSheetSuccess {
   readonly grandTotal: number;
 }
 
+/**
+ * What the sheet hands back: one entry per tender.
+ *
+ * A list even for a single method — paying by cash alone is a split of one — so the page has no
+ * branch for "single" and the server has no special case to keep working.
+ */
 export interface PaymentSheetResult {
-  readonly method: PaymentMethod;
-  readonly reference?: string | undefined;
+  readonly payments: readonly {
+    readonly method: PaymentMethod;
+    readonly amount: number;
+    readonly reference?: string | undefined;
+  }[];
+}
+
+/** What the sheet is currently collecting. `SPLIT` is not a payment method — it is a mode. */
+type PaymentMode = PaymentMethod | 'SPLIT';
+
+/** Money is compared and summed in paise here for the same reason the server does it. */
+const PAISE = 100;
+
+function toPaise(rupees: number): number {
+  return Math.round(rupees * PAISE);
 }
 
 export interface PaymentSheetData {
@@ -193,11 +212,7 @@ export interface PaymentSheetData {
             -->
             <div class="grid grid-cols-2 gap-pb-3">
               @for (option of methods; track option.value) {
-                <button
-                  type="button"
-                  class="flex min-h-32 cursor-pointer appearance-none flex-col items-center justify-center gap-pb-2 rounded-pb-xl border border-pos-gold/40 bg-pos-vanilla font-[inherit] text-inherit shadow-pb-xs transition-[transform,border-color,box-shadow] duration-pb-fast ease-pb-out hover:-translate-y-0.5 hover:border-pos-gold hover:shadow-pb-md active:translate-y-0 active:scale-[0.97] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
-                  (click)="choose(option.value)"
-                >
+                <button type="button" [class]="methodTileClass" (click)="choose(option.value)">
                   <span
                     class="grid h-14 w-14 place-items-center rounded-pb-full bg-pos-gold/15 text-pos-brown"
                     aria-hidden="true"
@@ -206,6 +221,148 @@ export interface PaymentSheetData {
                   </span>
                   <span class="text-base font-bold">{{ option.label }}</span>
                 </button>
+              }
+
+              <!--
+                Split, given the full width beneath the two single methods.
+
+                Below rather than beside them because it is a different kind of choice: cash and UPI
+                answer "which one", and this answers "more than one". Full width also keeps the two
+                common paths as the largest targets on the sheet, which is what the ten-second goal
+                depends on — a split is the exception, not the default.
+              -->
+              <button
+                type="button"
+                [class]="methodTileClass + ' col-span-2 !min-h-24 !flex-row !gap-pb-3'"
+                (click)="choose('SPLIT')"
+              >
+                <span
+                  class="grid h-12 w-12 shrink-0 place-items-center rounded-pb-full bg-pos-gold/15 text-pos-brown"
+                  aria-hidden="true"
+                >
+                  <pb-icon name="split" [size]="24" [strokeWidth]="2" />
+                </span>
+                <span class="text-left">
+                  <span class="block text-base font-bold">Split payment</span>
+                  <span class="block text-pb-caption text-pos-brown/70"> Part cash, part UPI </span>
+                </span>
+              </button>
+            </div>
+          } @else if (method() === 'SPLIT') {
+            <!--
+              ============================ SPLIT ============================
+
+              One amount field per method, and a running Remaining underneath.
+
+              The cashier types what the customer handed over in each form, and the field they have
+              not filled tells them what is left. That is the whole interaction: no running total to
+              read, no arithmetic to do at the counter with a queue.
+
+              **Remaining is computed in paise**, like the server's own check — 0.1 + 0.2 is not 0.3,
+              and a Remaining that reads ₹0.00 while the confirm button stays disabled because the
+              float is 0.0000001 out is the worst possible version of this screen.
+            -->
+            <div class="flex flex-col gap-pb-3">
+              @for (option of methods; track option.value) {
+                <div class="rounded-pb-lg border border-pos-gold/40 bg-pos-vanilla p-pb-3">
+                  <div class="flex items-center gap-pb-3">
+                    <span
+                      class="grid h-10 w-10 shrink-0 place-items-center rounded-pb-full bg-pos-gold/15 text-pos-brown"
+                      aria-hidden="true"
+                    >
+                      <pb-icon [name]="iconFor(option.value)" [size]="20" [strokeWidth]="2" />
+                    </span>
+
+                    <label
+                      class="min-w-0 flex-1 text-pb-subtitle font-bold"
+                      [attr.for]="'pb-split-' + option.value"
+                    >
+                      {{ option.label }}
+                    </label>
+
+                    <!--
+                      'inputmode="decimal"' rather than 'type="number"'.
+
+                      A number input on a phone shows a keypad with a spinner and silently accepts
+                      'e' and '+'; on a desktop a stray scroll over a focused field changes the
+                      amount, which on a payment screen is money moving because someone's finger
+                      brushed a trackpad. Text plus a decimal keypad gives the same keyboard and
+                      none of that.
+                    -->
+                    <div
+                      class="flex w-36 shrink-0 items-center gap-1 rounded-pb-md border border-pos-gold/50 bg-white px-pb-2 focus-within:border-pos-brown focus-within:shadow-pb-focus"
+                    >
+                      <span class="text-pb-body text-pos-brown/60" aria-hidden="true">₹</span>
+                      <input
+                        [id]="'pb-split-' + option.value"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        class="min-w-0 flex-1 appearance-none border-0 bg-transparent py-pb-2 text-right text-pb-title font-bold tabular-nums text-pos-brown outline-none"
+                        [value]="amountFor(option.value)"
+                        [disabled]="busy()"
+                        [attr.aria-label]="option.label + ' amount'"
+                        (input)="setAmount(option.value, $any($event.target).value)"
+                      />
+                    </div>
+                  </div>
+
+                  <!--
+                    The one-tap shortcut for the commonest split there is: the customer pays part in
+                    cash and the rest goes on the other method. Filling the remainder by hand means
+                    reading a figure off the screen and typing it back in, which is where a
+                    transposed digit comes from.
+                  -->
+                  <!--
+                    Only once part of the bill is already keyed.
+
+                    Before that, "put the remaining ₹447 here" is on *both* rows and offers to pay
+                    the whole thing by one method — which is not a split, it is what the two buttons
+                    on the previous screen are for. Showing it then also cost two rows of height and
+                    pushed Remaining, the one figure the cashier is watching, below the fold.
+                  -->
+                  @if (partiallyPaid() && remaining() > 0 && amountFor(option.value).length === 0) {
+                    <button
+                      type="button"
+                      class="mt-pb-2 cursor-pointer appearance-none rounded-pb-md border-0 bg-transparent p-0 text-pb-caption font-semibold text-pos-brown underline underline-offset-2"
+                      [disabled]="busy()"
+                      (click)="fillRemaining(option.value)"
+                    >
+                      Put the remaining {{ fmt(remaining()) }} here
+                    </button>
+                  }
+                </div>
+              }
+
+              <!--
+                The running balance, and the only thing on this panel that changes as you type.
+
+                Its tone is the state: amber while there is money outstanding, green the moment the
+                split balances. That is what the cashier is watching for, so it says "Payment
+                complete" rather than "₹0.00" — a zero is a number to interpret, a sentence is not.
+              -->
+              <div [class]="remainingClass()" aria-live="polite">
+                <pb-icon [name]="remainingIcon()" [size]="18" class="shrink-0" />
+                <span class="flex-1 text-pb-body font-semibold">{{ remainingLabel() }}</span>
+                @if (remaining() !== 0) {
+                  <span class="text-pb-title font-bold tabular-nums">
+                    {{ fmt(absRemaining()) }}
+                  </span>
+                }
+              </div>
+
+              @if (upiInSplit()) {
+                <mat-form-field class="w-full" subscriptSizing="dynamic">
+                  <mat-label>UPI reference (optional)</mat-label>
+                  <input
+                    matInput
+                    [value]="reference()"
+                    maxlength="60"
+                    [disabled]="busy()"
+                    (input)="reference.set($any($event.target).value)"
+                  />
+                  <mat-hint>Last digits from their screen, if you want a record</mat-hint>
+                </mat-form-field>
               }
             </div>
           } @else if (method() === 'UPI') {
@@ -316,7 +473,7 @@ export interface PaymentSheetData {
               matButton="filled"
               type="button"
               class="pb-gradient-brand !h-14 !rounded-pb-lg !text-base !font-bold"
-              [disabled]="busy()"
+              [disabled]="!canConfirm()"
               (click)="confirm()"
             >
               <!--
@@ -345,8 +502,22 @@ export class PaymentSheetComponent {
   private readonly dialogRef = inject<MatDialogRef<PaymentSheetComponent, undefined>>(MatDialogRef);
 
   protected readonly methods = PAYMENT_METHODS;
-  protected readonly method = signal<PaymentMethod | null>(null);
+  protected readonly method = signal<PaymentMode | null>(null);
   protected readonly reference = signal('');
+
+  /**
+   * What the cashier has keyed against each method, as typed.
+   *
+   * Held as **strings, not numbers**, and that is deliberate: a cashier midway through typing "2"
+   * of "247" has a valid partial entry, and parsing to a number on every keystroke would rewrite
+   * their field — "2." becomes 2 and the decimal point they just pressed disappears. The strings
+   * are parsed when the total is computed and again on submit; the field itself is never
+   * reformatted underneath them.
+   */
+  private readonly amounts = signal<Readonly<Record<string, string>>>({});
+
+  protected readonly methodTileClass =
+    'flex min-h-32 cursor-pointer appearance-none flex-col items-center justify-center gap-pb-2 rounded-pb-xl border border-pos-gold/40 bg-pos-vanilla font-[inherit] text-inherit shadow-pb-xs transition-[transform,border-color,box-shadow] duration-pb-fast ease-pb-out hover:-translate-y-0.5 hover:border-pos-gold hover:shadow-pb-md active:translate-y-0 active:scale-[0.97] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100';
 
   /**
    * Whether the request is in flight, and with it whether every control that could start or
@@ -375,6 +546,95 @@ export class PaymentSheetComponent {
   });
 
   protected readonly total = money(this.data.total);
+
+  // ---------------------------------------------------------------------------
+  // Split
+  // ---------------------------------------------------------------------------
+
+  /** What is keyed against one method, as the cashier typed it. */
+  protected amountFor(method: PaymentMethod): string {
+    return this.amounts()[method] ?? '';
+  }
+
+  /**
+   * Accepts a keystroke into one amount field.
+   *
+   * Filters to digits and a single decimal point rather than rejecting the whole entry: a cashier
+   * who fat-fingers a letter should lose that character, not their field. Capped at two decimal
+   * places, matching what the column stores and what the server will accept.
+   */
+  protected setAmount(method: PaymentMethod, raw: string): void {
+    const cleaned = raw.replace(/[^\d.]/g, '');
+    const [whole = '', ...rest] = cleaned.split('.');
+    const value = rest.length === 0 ? whole : `${whole}.${rest.join('').slice(0, 2)}`;
+
+    this.amounts.update((current) => ({ ...current, [method]: value }));
+  }
+
+  /** Drops the outstanding balance into one method, for the commonest two-tender split. */
+  protected fillRemaining(method: PaymentMethod): void {
+    const outstanding = this.remaining();
+
+    if (outstanding <= 0) {
+      return;
+    }
+
+    this.amounts.update((current) => ({ ...current, [method]: outstanding.toFixed(2) }));
+  }
+
+  /** The paise keyed so far, across every method. */
+  private readonly tenderedPaise = computed(() =>
+    this.methods.reduce((sum, option) => {
+      const parsed = Number.parseFloat(this.amounts()[option.value] ?? '');
+      return Number.isFinite(parsed) && parsed > 0 ? sum + toPaise(parsed) : sum;
+    }, 0),
+  );
+
+  /**
+   * What is still owed, in rupees. Negative when the cashier has keyed more than the bill.
+   *
+   * Derived in paise and converted once, so the value the button gates on and the value on screen
+   * are the same arithmetic — a Remaining that reads ₹0.00 beside a disabled confirm button is the
+   * one failure this screen cannot have.
+   */
+  protected readonly remaining = computed(
+    () => (toPaise(this.data.total) - this.tenderedPaise()) / PAISE,
+  );
+
+  protected readonly absRemaining = computed(() => Math.abs(this.remaining()));
+
+  /** Whether any amount has been keyed yet — what makes "put the rest here" meaningful. */
+  protected readonly partiallyPaid = computed(() => this.tenderedPaise() > 0);
+
+  /** True the moment the keyed amounts balance the bill exactly. */
+  protected readonly splitBalances = computed(
+    () => this.tenderedPaise() === toPaise(this.data.total),
+  );
+
+  protected readonly remainingLabel = computed(() => {
+    const outstanding = this.remaining();
+
+    if (outstanding > 0) {
+      return 'Remaining';
+    }
+
+    return outstanding < 0 ? 'Over by' : 'Payment complete';
+  });
+
+  protected readonly remainingIcon = computed<PbIconName>(() =>
+    this.splitBalances() ? 'ok' : 'warning',
+  );
+
+  protected readonly remainingClass = computed(() => {
+    const base = 'flex items-center gap-pb-3 rounded-pb-lg border p-pb-3';
+    return this.splitBalances() ? `${base} pb-tone-success` : `${base} pb-tone-warning`;
+  });
+
+  /** Whether a UPI amount has been keyed, which is what makes the reference field relevant. */
+  protected readonly upiInSplit = computed(() => {
+    const parsed = Number.parseFloat(this.amounts()[PaymentMethod.UPI] ?? '');
+    return Number.isFinite(parsed) && parsed > 0;
+  });
 
   protected fmt(value: number): string {
     return money(value);
@@ -409,13 +669,16 @@ export class PaymentSheetComponent {
   /** Rendered as text rather than relying on the copy baked into the image. */
   protected readonly upiId = UPI_ID;
 
-  protected choose(method: PaymentMethod): void {
+  protected choose(method: PaymentMode): void {
     this.method.set(method);
   }
 
   protected back(): void {
     this.method.set(null);
     this.reference.set('');
+    // The amounts go too. Keeping them would mean returning to a split half-filled from a previous
+    // attempt at a different method, which is a trap rather than a convenience.
+    this.amounts.set({});
   }
 
   /**
@@ -424,19 +687,63 @@ export class PaymentSheetComponent {
    * Does **not** close the sheet. The page closes it once the order is actually saved, so a
    * failure has somewhere to appear and the retry keeps the method and reference already keyed.
    */
-  protected confirm(): void {
-    const method = this.method();
+  /**
+   * Whether the sheet has enough to submit.
+   *
+   * For a single method that is simply "one is chosen" — the amount is the whole bill and there is
+   * nothing to get wrong. For a split it is the balance being exactly zero, which is the same
+   * condition the server re-checks: the button and the API agree on what "paid" means, so a
+   * cashier can never be shown an enabled button that the server then rejects.
+   */
+  protected readonly canConfirm = computed(() => {
+    const mode = this.method();
 
-    if (method === null || this.busy()) {
+    if (mode === null || this.busy()) {
+      return false;
+    }
+
+    return mode === 'SPLIT' ? this.splitBalances() : true;
+  });
+
+  /**
+   * Hands the tenders to the page, which saves them.
+   *
+   * Does **not** close the sheet. The page reports the outcome back into it, so a failure has
+   * somewhere to appear and a retry keeps the amounts already keyed — which for a split is the
+   * difference between pressing Try again and re-entering the whole thing.
+   */
+  protected confirm(): void {
+    const mode = this.method();
+
+    if (mode === null || !this.canConfirm()) {
       return;
     }
 
     const reference = this.reference().trim();
+    const withReference = reference.length === 0 ? {} : { reference };
 
-    this.data.confirm({
-      method,
-      ...(reference.length === 0 ? {} : { reference }),
-    });
+    if (mode !== 'SPLIT') {
+      // A split of one: the whole bill, that way. The server would apply the same amount itself,
+      // but sending it keeps one shape on the wire for every payment.
+      this.data.confirm({
+        payments: [{ method: mode, amount: this.data.total, ...withReference }],
+      });
+      return;
+    }
+
+    const payments = this.methods
+      .map((option) => ({
+        method: option.value,
+        amount: Number.parseFloat(this.amounts()[option.value] ?? ''),
+      }))
+      // A method the cashier left blank is not a zero payment, it is a method they did not use.
+      .filter((tender) => Number.isFinite(tender.amount) && tender.amount > 0)
+      .map((tender) => ({
+        ...tender,
+        ...(tender.method === PaymentMethod.UPI ? withReference : {}),
+      }));
+
+    this.data.confirm({ payments });
   }
 
   protected cancel(): void {

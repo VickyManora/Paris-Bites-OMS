@@ -10,10 +10,11 @@
     "test": "ng test",
     "test:ci": "ng test --no-watch --no-progress --browsers=ChromeHeadless",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "node tools/check-template-backticks.mjs && eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,html,scss,css,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,html,scss,css,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,html,scss,css,json}\"",
+    "check:templates": "node tools/check-template-backticks.mjs"
   },
   "prettier": {
     "printWidth": 100,

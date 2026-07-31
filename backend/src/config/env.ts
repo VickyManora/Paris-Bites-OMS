@@ -98,6 +98,29 @@ const envSchema = z.object({
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
 
   /**
+   * Domain appended to a bare login name, so `admin` reaches `admin@parisbites.local`.
+   *
+   * A local convenience only: it exists so the seeded dev accounts can be reached by typing
+   * `admin` or `sunil` instead of a full address forty times a day. Set it to
+   * `parisbites.local` in a development `.env`.
+   *
+   * **Ignored in production**, and not merely by convention — `devLoginDomain` below forces it
+   * to `undefined` when `NODE_ENV=production`, so setting it in a production environment has no
+   * effect at all. That matters because expanding a bare name is a small widening of what the
+   * login endpoint accepts, and the guarantee worth having is that the widening cannot exist on
+   * a deployed instance regardless of how its environment is configured.
+   */
+  DEV_LOGIN_DOMAIN: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(
+      /^[a-z0-9.-]+$/,
+      'DEV_LOGIN_DOMAIN must be a bare hostname such as "parisbites.local".',
+    )
+    .optional(),
+
+  /**
    * Refresh-token cookie attributes.
    *
    * In production the Angular app (Vercel) and the API (Railway) are on different
@@ -189,6 +212,17 @@ export const env: Env = loadEnv();
 export const isProduction = env.NODE_ENV === 'production';
 export const isDevelopment = env.NODE_ENV === 'development';
 export const isTest = env.NODE_ENV === 'test';
+
+/**
+ * The bare-login-name domain, or `undefined` when there is none.
+ *
+ * Hard-gated on the environment rather than read straight from `env`, so a production
+ * deployment that happens to carry `DEV_LOGIN_DOMAIN` still refuses bare names. See the
+ * schema entry for why the guarantee is worth the extra export.
+ */
+export const devLoginDomain: string | undefined = isProduction
+  ? undefined
+  : env.DEV_LOGIN_DOMAIN;
 
 /** Resolved cookie attributes, with environment-appropriate defaults applied. */
 export const cookieOptions = {

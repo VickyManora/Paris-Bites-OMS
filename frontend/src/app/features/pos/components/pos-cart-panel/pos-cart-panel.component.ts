@@ -317,6 +317,29 @@ import { PosCartStore } from '../../services/pos-cart-store.service';
             <dt class="text-pb-caption text-pos-brown/70">Subtotal</dt>
             <dd class="m-0 text-pb-caption tabular-nums">{{ fmt(cart.subtotal()) }}</dd>
           </div>
+
+          <!--
+            The automatic offer, named rather than folded into the total.
+
+            A saving the customer cannot see is a saving they do not know they got, and a total that
+            silently differs from the sum of the lines is one the cashier cannot explain. Each pair
+            is listed with the two bowls it matched, so "why is this ₹79 less" is answerable at the
+            counter without opening anything.
+          -->
+          @for (match of cart.comboPreview().matches; track $index) {
+            <div class="flex items-start justify-between gap-pb-2">
+              <dt class="min-w-0 text-pb-caption text-pb-success-fg">
+                {{ match.label }}
+                <span class="block truncate opacity-80">
+                  {{ match.products[0] }} + {{ match.products[1] }}
+                </span>
+              </dt>
+              <dd class="m-0 shrink-0 text-pb-caption tabular-nums text-pb-success-fg">
+                −{{ fmt(match.saving) }}
+              </dd>
+            </div>
+          }
+
           @if (cart.discountAmount() > 0) {
             <div class="flex justify-between">
               <dt class="text-pb-caption text-pos-brown/70">

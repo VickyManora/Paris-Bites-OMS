@@ -1,11 +1,13 @@
 import type { PrismaClient } from '../src/generated/prisma/client.js';
-import { findDuplicateMenuNames, MENU } from './menu-master.js';
+import { findDuplicateMenuNames, MENU, RETIRED_PRODUCTS } from './menu-master.js';
 
 export interface MenuSeedResult {
   readonly categoriesCreated: number;
   readonly categoriesUpdated: number;
   readonly productsCreated: number;
   readonly productsUpdated: number;
+  /** Products taken off the menu by this run. Already-retired ones are not counted again. */
+  readonly productsRetired: number;
 }
 
 /**
@@ -106,5 +108,29 @@ export async function seedMenu(client: PrismaClient): Promise<MenuSeedResult> {
     }
   }
 
-  return { categoriesCreated, categoriesUpdated, productsCreated, productsUpdated };
+  /*
+   * Retire what the menu no longer sells.
+   *
+   * The one place this seed removes anything, and it is a soft delete: the FK from
+   * `sales_order_items` is RESTRICT, so a sold product cannot be deleted without erasing the sale.
+   * Filtering on `deletedAt: null` means an already-retired product is skipped, which keeps the run
+   * idempotent and the count honest.
+   */
+  const retired = await client.product.updateMany({
+    where: {
+      deletedAt: null,
+      OR: RETIRED_PRODUCTS.map((name) => ({
+        name: { equals: name, mode: 'insensitive' as const },
+      })),
+    },
+    data: { deletedAt: new Date(), isAvailable: false },
+  });
+
+  return {
+    categoriesCreated,
+    categoriesUpdated,
+    productsCreated,
+    productsUpdated,
+    productsRetired: retired.count,
+  };
 }

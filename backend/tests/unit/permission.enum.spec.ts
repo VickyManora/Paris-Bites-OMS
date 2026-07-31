@@ -31,16 +31,17 @@ describe('Role permissions', () => {
     expect(manager.every((permission) => admin.includes(permission))).toBe(true);
   });
 
-  it('lets Store Manager run day-to-day store operations', () => {
+  it('lets Store Manager run the cart day to day', () => {
     for (const permission of [
       Permission.PRODUCT_READ,
       Permission.PRODUCT_CREATE,
       Permission.PRODUCT_UPDATE,
       Permission.STOCK_READ,
       Permission.STOCK_ADJUST,
-      Permission.SUPPLIER_MANAGE,
-      Permission.PURCHASE_ORDER_CREATE,
-      Permission.REPORT_VIEW,
+      // Sells at the counter, and asks the warehouse for stock.
+      Permission.POS_OPERATE,
+      Permission.TRANSFER_CREATE,
+      Permission.TRANSFER_COMPLETE,
     ]) {
       expect(roleHasPermission(Role.STORE_MANAGER, permission)).toBe(true);
     }
@@ -62,6 +63,29 @@ describe('Role permissions', () => {
       Permission.STOCK_WRITE_OFF,
       Permission.PURCHASE_ORDER_APPROVE,
       Permission.REPORT_VIEW_FINANCIAL,
+    ]) {
+      expect(roleHasPermission(Role.STORE_MANAGER, permission)).toBe(false);
+    }
+  });
+
+  /**
+   * Buying and reporting, asserted as a group of their own.
+   *
+   * Separate from the test above because these are withheld for a different reason: not that
+   * they are dangerous, but that they are not this role's job — the cart is supplied by stock
+   * transfers rather than by its own purchase orders. Keeping them apart means a future change
+   * that deliberately re-grants one does not have to edit a list whose comment says "sensitive".
+   *
+   * Read is asserted alongside write for each area. A role that can list suppliers but not edit
+   * them still has a Suppliers screen in its sidebar, which is the thing being removed.
+   */
+  it('withholds buying and reporting from Store Manager', () => {
+    for (const permission of [
+      Permission.SUPPLIER_READ,
+      Permission.SUPPLIER_MANAGE,
+      Permission.PURCHASE_ORDER_READ,
+      Permission.PURCHASE_ORDER_CREATE,
+      Permission.REPORT_VIEW,
     ]) {
       expect(roleHasPermission(Role.STORE_MANAGER, permission)).toBe(false);
     }

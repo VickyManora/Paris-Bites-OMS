@@ -23,7 +23,9 @@ import type { TableColumn } from '../../../../shared/models/table-column.model';
 import { money, timestamp, toDateInput } from '../../../../shared/utils/format.utils';
 import { OrderDetailDialogComponent } from '../../components/order-detail-dialog/order-detail-dialog.component';
 import {
+  ORDER_STATUS_STYLE,
   PAYMENT_METHODS,
+  paymentSummaryOf,
   type Order,
   type OrderStatus,
   type PaymentMethod,
@@ -173,11 +175,21 @@ export class PosOrdersPage implements OnInit {
       sortable: true,
       hideOnMobile: true,
     },
-    { key: 'status', header: 'Status', value: (row) => row.statusLabel },
+    {
+      key: 'status',
+      header: 'Status',
+      value: (row) => row.statusLabel,
+      // A badge, like every other list in the app. This page kept plain text when the CRUD tables
+      // gained tones, so "Cancelled" and "Paid" sat in identical ink in the one list where the
+      // difference is money.
+      tone: (row) => ORDER_STATUS_STYLE[row.status].tone,
+    },
     {
       key: 'paymentMethodLabel',
       header: 'Payment',
-      value: (row) => row.paymentMethodLabel ?? '—',
+      // Built from the payment rows, not from `paymentMethodLabel` — that is null for a split by
+      // design, so reading it alone showed an em dash on exactly the orders this column matters for.
+      value: (row) => paymentSummaryOf(row),
       hideOnMobile: true,
     },
     {

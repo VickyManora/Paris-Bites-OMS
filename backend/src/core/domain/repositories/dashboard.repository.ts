@@ -62,6 +62,20 @@ export interface DashboardAggregates {
     readonly lines: number;
     readonly items: number;
   };
+
+  /**
+   * Days in the window with no consumption sheet, most recent first, excluding today.
+   *
+   * The same anti-join as `unrecordedSalesDays` and excluded on the same reasoning: today is
+   * not late yet, because the sheet is written up as the day is worked. Yesterday is.
+   *
+   * This exists because "was it recorded today" is the wrong question to nag on. The sheet for
+   * a day is routinely finished the next morning, so a dashboard that only knows about today
+   * says nothing at 9am about the day that actually got missed — and consumption, like takings,
+   * cannot be reconstructed afterwards from anything the system holds. Somebody has to
+   * remember what the cart used, and they only remember for about a day.
+   */
+  readonly unrecordedConsumptionDays: readonly string[];
   readonly topIngredients: readonly TopIngredientRow[];
   readonly writeDowns: { readonly events: number; readonly itemsAffected: number };
   readonly purchasesMissingInvoice: number;

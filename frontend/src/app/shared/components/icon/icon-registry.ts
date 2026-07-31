@@ -59,6 +59,7 @@ import {
   SearchX,
   Star,
   SlidersHorizontal,
+  Split,
   SquarePen,
   Store,
   Sun,
@@ -117,6 +118,13 @@ export const PB_ICONS = {
   menuClose: PanelLeftClose,
   collapse: ChevronLeft,
   expand: ChevronRight,
+  /*
+   * The same glyph as `expand`, under the name the call site means.
+   *
+   * A breadcrumb separator is not an expand affordance, and `name="expand"` in a trail would read
+   * as a bug to the next person. Two names for one drawing is what a registry is for.
+   */
+  chevronRight: ChevronRight,
   search: Search,
   searchEmpty: SearchX,
   close: X,
@@ -162,6 +170,7 @@ export const PB_ICONS = {
   health: Activity,
   categories: Boxes,
   qr: QrCode,
+  split: Split,
   trendUp: TrendingUp,
   trendDown: TrendingDown,
   edit: SquarePen,

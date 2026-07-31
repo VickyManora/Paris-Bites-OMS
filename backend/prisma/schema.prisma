@@ -1304,7 +1304,24 @@ model SalesOrder {
   /// reason is indistinguishable from a staff member undercharging a friend.
   discountReason String?      @map("discount_reason")
 
-  /// `subtotal - discountAmount`. Stored because every list and tile wants it.
+  /// What the "any 2" offers took off this order, and how many pairs matched.
+  ///
+  /// **Deliberately not the `discount*` columns above.** Those are the discretionary reduction a
+  /// staff member chose to give: they require a stated reason and count against the Store Manager's
+  /// 20% ceiling. A combo is neither — it is the shop's own published price for a pair, needs no
+  /// justification, and must not eat the headroom a manager has for a real goodwill discount. A
+  /// 2×Blueberry pair is already 16.5% of its subtotal, so sharing the field would leave almost
+  /// nothing before the ceiling refused the order.
+  ///
+  /// Keeping them apart is also the only way to answer the two different questions later: what our
+  /// offers cost us, versus what staff gave away.
+  ///
+  /// The *flavours* are not stored here — they are the order's own lines, which is the whole point
+  /// of pairing real bowls instead of selling a "combo" product that recorded neither.
+  comboDiscountAmount Decimal @default(0) @map("combo_discount_amount") @db.Decimal(12, 2)
+  comboCount          Int     @default(0) @map("combo_count")
+
+  /// `subtotal - comboDiscountAmount - discountAmount`. Stored because every list and tile wants it.
   grandTotal Decimal @map("grand_total") @db.Decimal(12, 2)
 
   /// Free text from the counter: "extra chocolate", "no oreo", "birthday order".

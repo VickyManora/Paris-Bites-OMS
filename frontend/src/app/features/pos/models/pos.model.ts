@@ -105,6 +105,28 @@ export interface OrderPayment {
   readonly createdAt: string;
 }
 
+/**
+ * How an order was paid, in one line.
+ *
+ * `Cash`, `Cash + UPI`, or `Unpaid`. The **methods only** — the amounts belong in the detail view,
+ * where there is room to put each against its own figure, and a list column reading
+ * "Cash ₹200.00 + UPI ₹247.00" would be wider than the product name beside it.
+ *
+ * Derived from `payments` rather than from `paymentMethod`, which the server sets to null for a
+ * split by design. Reading that field alone is what made every split order show an em dash in the
+ * orders list — the one place the new payment feature was visible and it said nothing.
+ *
+ * One definition, exported, so the list column and any future caller cannot word it differently.
+ */
+export function paymentSummaryOf(order: Pick<Order, 'payments'>): string {
+  if (order.payments.length === 0) {
+    return 'Unpaid';
+  }
+
+  // Ordered as taken. A cashier who keyed cash first reads it back the way they entered it.
+  return order.payments.map((payment) => payment.methodLabel).join(' + ');
+}
+
 export interface Order {
   readonly id: string;
   readonly orderNumber: string;
@@ -164,8 +186,23 @@ export interface PlaceOrderRequest {
   readonly notes?: string | undefined;
   readonly customer?:
     { readonly name?: string | undefined; readonly phone?: string | undefined } | undefined;
-  readonly payment?:
-    { readonly method: PaymentMethod; readonly reference?: string | undefined } | undefined;
+  /**
+   * One entry per tender the customer paid with.
+   *
+   * A split of one for the ordinary case — paying by cash alone is `[{ method: 'CASH', amount: total }]`
+   * — so the client has no separate code path for "single method". The amounts must add up to the
+   * order total, and the **server checks that**: it prices the order itself and refuses a set of
+   * payments that does not match, so a wrong sum is a rejected order rather than a settled one that
+   * is short.
+   */
+  readonly payments?: readonly OrderTenderRequest[] | undefined;
+}
+
+export interface OrderTenderRequest {
+  readonly method: PaymentMethod;
+  /** Rupees, at most two decimal places. */
+  readonly amount: number;
+  readonly reference?: string | undefined;
 }
 
 export interface OrderQuery {

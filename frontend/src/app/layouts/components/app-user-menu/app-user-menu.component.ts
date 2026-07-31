@@ -72,7 +72,7 @@ interface ThemeChoice {
           </span>
           <div class="min-w-0">
             <p class="m-0 truncate text-pb-subtitle text-on-surface">{{ user.fullName }}</p>
-            <p class="m-0 truncate text-pb-caption text-on-surface-variant">{{ user.email }}</p>
+            <p class="m-0 truncate text-pb-caption text-pb-text-secondary">{{ user.email }}</p>
           </div>
         </div>
 
@@ -89,7 +89,7 @@ interface ThemeChoice {
       -->
       <div role="group" aria-label="Appearance">
         <p
-          class="m-0 px-pb-3 pb-pb-1 pt-pb-2 text-pb-overline uppercase text-on-surface-variant"
+          class="m-0 px-pb-3 pb-pb-1 pt-pb-2 text-pb-overline uppercase text-pb-text-secondary"
           aria-hidden="true"
         >
           Appearance
@@ -147,7 +147,7 @@ export class AppUserMenuComponent {
 
   /** `rounded-pb-full` so the hover ring follows the avatar rather than boxing it. */
   protected readonly triggerClass =
-    'grid h-10 w-10 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-full border-0 bg-transparent p-0 ring-2 ring-transparent transition-[box-shadow,transform] duration-pb-fast ease-pb-out hover:ring-pb-selected-border focus-visible:ring-pb-interactive motion-reduce:transition-none';
+    'grid h-11 w-11 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-full border-0 bg-transparent p-0 ring-2 ring-transparent transition-[box-shadow,transform] duration-pb-fast ease-pb-out hover:ring-pb-selected-border focus-visible:ring-pb-interactive motion-reduce:transition-none';
   protected readonly profileRoute = AppRoutes.profile;
 
   /**

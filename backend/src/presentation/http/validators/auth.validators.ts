@@ -1,5 +1,34 @@
 import { z } from 'zod';
+import { devLoginDomain } from '../../../config/env.js';
 import { emailSchema, passwordSchema } from './common.validators.js';
+
+/**
+ * The account identifier, which is an e-mail address everywhere that matters.
+ *
+ * When `DEV_LOGIN_DOMAIN` is set — development only, see `devLoginDomain` — a value with no
+ * `@` in it has that domain appended, so the seeded `admin` and `sunil` accounts can be
+ * reached by typing just the name. Anything already containing an `@` is untouched, so a real
+ * address behaves identically either way.
+ *
+ * The expansion happens *before* `emailSchema`, and the result is piped through it rather
+ * than around it: a bare name still has to produce a valid, length-bounded address, and the
+ * shape of an e-mail is still defined in exactly one place. With no dev domain configured the
+ * transform is the identity function and this is `emailSchema` verbatim — which is the whole
+ * of the behaviour in production.
+ */
+const loginIdentifierSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  // Bounded here as well as in `emailSchema`, so an enormous body is rejected before the
+  // domain is concatenated onto it rather than after.
+  .max(255, 'Email must be at most 255 characters.')
+  .transform((value) =>
+    devLoginDomain !== undefined && value.length > 0 && !value.includes('@')
+      ? `${value}@${devLoginDomain}`
+      : value,
+  )
+  .pipe(emailSchema);
 
 /**
  * Login accepts any non-empty password rather than applying `passwordSchema`.
@@ -10,7 +39,7 @@ import { emailSchema, passwordSchema } from './common.validators.js';
  * about presenting one.
  */
 export const loginSchema = z.object({
-  email: emailSchema,
+  email: loginIdentifierSchema,
   password: z
     .string()
     .min(1, 'Password is required.')

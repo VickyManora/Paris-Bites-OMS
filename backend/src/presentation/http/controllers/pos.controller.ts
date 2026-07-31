@@ -141,6 +141,11 @@ export class PosController {
           body.payment === undefined
             ? undefined
             : { method: body.payment.method as PaymentMethod, reference: body.payment.reference },
+        payments: body.payments?.map((payment) => ({
+          method: payment.method as PaymentMethod,
+          amount: payment.amount,
+          reference: payment.reference,
+        })),
         ...this.contextOf(req),
       }),
     );

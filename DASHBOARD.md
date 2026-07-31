@@ -88,11 +88,19 @@ The value slot has to render both `₹16,271` and `Not declared`, and the same 3
 cannot serve both — a two-word phrase at figure weight fills the card and outshouts the counts beside
 it. `pb-metric-tile` detects a letter in the value and drops to title weight.
 
-The hero does the same for its placeholder. An em dash is passed when a day has not been entered —
-deliberately, since a confident `₹0.00` on a Saturday evening reads as "we sold nothing" rather than
+The hero does the same for its placeholder. An em dash is passed when there is nothing at all to show
+— deliberately, since a confident `₹0.00` on a Saturday evening reads as "we sold nothing" rather than
 "nobody has typed it in" — but at 52px semibold an em dash is a solid black bar that looks like a
 redaction, and it was the loudest mark on the page for the one card with no news. The placeholder now
 renders smaller and muted. The value is unchanged; only its weight is.
+
+That placeholder is also rarer than it was: on an unrecorded day the hero now shows the **till's**
+revenue from `posToday`, with an amber `From the till · not yet confirmed` badge and a
+`Confirm today's takings` button. The em dash is reserved for a day with no declared entry *and* no
+counter takings. The badge is not decoration — the till figure excludes aggregators by definition, so
+on a Zomato day it is genuinely lower than the day's real total, and a provisional number that looked
+like a confirmed one would quietly undermine the `walkInReconciliation` variance this page also
+ships. See [SALES.md](./SALES.md#the-till-fills-the-form-in).
 
 ---
 
@@ -105,7 +113,7 @@ are emptied and the tiles omitted entirely.
 
 | Tile | Shows |
 |---|---|
-| Today's sales | the day's takings, or `—` when it has not been entered |
+| Today's sales | the declared takings; the till's figure (badged provisional) while unrecorded; `—` when neither exists |
 | Sales this month | month to date, captioned "N of M days recorded" |
 | Cash today | today's cash, and its share |
 | Platforms today | today's Zomato + Swiggy, and its share |

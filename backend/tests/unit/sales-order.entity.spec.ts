@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkTenders,
   computeTotals,
   effectiveDiscountPercent,
   priceLines,
@@ -97,9 +98,37 @@ describe('computeTotals', () => {
   it('totals an empty cart to zero rather than throwing', () => {
     expect(computeTotals([], DiscountType.NONE, 0)).toEqual({
       subtotal: 0,
+      comboDiscount: 0,
       discountAmount: 0,
       grandTotal: 0,
     });
+  });
+
+  it('takes the combo saving before the staff discount', () => {
+    // Two KitKat bowls: 338 subtotal, 39 combo saving, then 10% of the remaining 299.
+    const lines = priceLines([
+      { productId: 'p1', productName: 'KitKat Break', unitPrice: 169, quantity: 2 },
+    ]);
+
+    const totals = computeTotals(lines, DiscountType.PERCENTAGE, 10, 39);
+
+    expect(totals.subtotal).toBe(338);
+    expect(totals.comboDiscount).toBe(39);
+    // 10% of 299, not of 338 — the customer was never going to pay 338.
+    expect(totals.discountAmount).toBe(29.9);
+    expect(totals.grandTotal).toBe(269.1);
+  });
+
+  it('never lets a combo and a discount together exceed the order', () => {
+    const lines = priceLines([
+      { productId: 'p1', productName: 'KitKat Break', unitPrice: 169, quantity: 2 },
+    ]);
+
+    // A ₹500 flat discount on what is left after a ₹39 combo saving.
+    const totals = computeTotals(lines, DiscountType.FLAT, 500, 39);
+
+    expect(totals.grandTotal).toBe(0);
+    expect(totals.comboDiscount + totals.discountAmount).toBe(totals.subtotal);
   });
 });
 
@@ -162,6 +191,9 @@ describe('SalesOrder', () => {
       orderNumber: 'PB-20260728-0001',
       channel: SalesChannel.WALK_IN,
       status: OrderStatus.PAID,
+      // No combo unless a test says otherwise, which is what almost every order is.
+      comboDiscountAmount: 0,
+      comboCount: 0,
       customerId: null,
       customerName: null,
       customerPhone: null,
@@ -239,5 +271,65 @@ describe('SalesOrder', () => {
 
     expect(order.isPaid).toBe(false);
     expect(order.amountDue).toBe(537);
+  });
+});
+
+describe('checkTenders', () => {
+  const cash = (amount: number) => ({ method: PaymentMethod.CASH, amount });
+  const upi = (amount: number) => ({ method: PaymentMethod.UPI, amount });
+
+  it('accepts a single tender covering the whole order', () => {
+    expect(checkTenders([cash(447)], 447)).toBeNull();
+  });
+
+  it('accepts a split that adds up', () => {
+    expect(checkTenders([cash(200), upi(247)], 447)).toBeNull();
+  });
+
+  /**
+   * The case the paise comparison exists for.
+   *
+   * 149.90 + 297.10 is 447.00000000000006 in binary floating point, so a naive `===` against 447
+   * rejects a split the cashier keyed correctly — at the counter, with a queue.
+   */
+  it('accepts amounts that only sum exactly in paise', () => {
+    expect(checkTenders([cash(149.9), upi(297.1)], 447)).toBeNull();
+  });
+
+  it('rejects a split that is short', () => {
+    expect(checkTenders([cash(200), upi(200)], 447)).toBe('DOES_NOT_MATCH_TOTAL');
+  });
+
+  /**
+   * Overpayment is refused as firmly as underpayment.
+   *
+   * Not because taking more money is a problem, but because this system has no way to express it:
+   * the payments would sum past the order and no row would say the difference was change. Tendered
+   * and change are a separate feature — see the note in the payment sheet.
+   */
+  it('rejects a split that overpays', () => {
+    expect(checkTenders([cash(500), upi(247)], 447)).toBe('DOES_NOT_MATCH_TOTAL');
+  });
+
+  it('rejects a payment a single paisa short', () => {
+    expect(checkTenders([cash(200), upi(246.99)], 447)).toBe('DOES_NOT_MATCH_TOTAL');
+  });
+
+  it('rejects the same method twice', () => {
+    expect(checkTenders([cash(200), cash(247)], 447)).toBe('DUPLICATE_METHOD');
+  });
+
+  it('rejects a zero tender', () => {
+    expect(checkTenders([cash(447), upi(0)], 447)).toBe('NON_POSITIVE_AMOUNT');
+  });
+
+  it('rejects a negative tender, which would be a refund', () => {
+    expect(checkTenders([cash(500), upi(-53)], 447)).toBe('NON_POSITIVE_AMOUNT');
+  });
+
+  /** An unpaid order is legitimate; it is simply not settled. */
+  it('accepts no tenders only against a zero total', () => {
+    expect(checkTenders([], 0)).toBeNull();
+    expect(checkTenders([], 447)).toBe('DOES_NOT_MATCH_TOTAL');
   });
 });

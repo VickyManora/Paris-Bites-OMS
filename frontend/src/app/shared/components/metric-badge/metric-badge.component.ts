@@ -33,7 +33,11 @@ export type MetricDirection = 'up' | 'down' | 'flat';
       @if (direction() !== 'flat') {
         <!-- 14px at stroke 2, matching 'pb-status-badge' — the two sit side by side on a stat
              card and a lighter arrow beside a heavier tick reads as a rendering fault. -->
-        <pb-icon [name]="direction() === 'up' ? 'arrowUp' : 'arrowDown'" [size]="14" [strokeWidth]="2" />
+        <pb-icon
+          [name]="direction() === 'up' ? 'arrowUp' : 'arrowDown'"
+          [size]="14"
+          [strokeWidth]="2"
+        />
       }
       <span class="tabular-nums">{{ value() }}</span>
       @if (caption()) {

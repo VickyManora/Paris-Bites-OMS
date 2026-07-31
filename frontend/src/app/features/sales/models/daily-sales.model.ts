@@ -170,7 +170,15 @@ export interface RecordDailySalesRequest {
 export interface UpdateDailySalesRequest {
   readonly notes?: string | undefined;
   readonly amounts: readonly DailySalesAmount[];
-  readonly reason: string;
+  /**
+   * Why a recorded figure changed.
+   *
+   * Omitted when the edit only fills buckets that were empty — adding Zomato once the platform
+   * settles is completing the day, not correcting it. The server applies the same rule against the
+   * stored figures and is the authority; this being optional does not make it optional for a real
+   * correction.
+   */
+  readonly reason?: string | undefined;
 }
 
 export type DailySalesSortField = 'entryDate' | 'totalAmount';

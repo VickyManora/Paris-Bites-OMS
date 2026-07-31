@@ -57,12 +57,17 @@ export const recordDailySalesSchema = z.object({
 export const updateDailySalesSchema = z.object({
   notes: z.string().trim().max(500).optional(),
   amounts: z.array(amountEntrySchema).min(1, 'Enter the takings for at least one channel.').max(8),
-  /** Required: a corrected revenue figure with no explanation is not auditable. */
-  reason: z
-    .string()
-    .trim()
-    .min(3, 'Say why the figure changed.')
-    .max(300),
+  /**
+   * Why the figure changed. Optional *here* and still required for a real correction — the use
+   * case decides, because only it can see the stored figures.
+   *
+   * The distinction is between completing a day and correcting one. Filling a bucket that was
+   * empty ("Zomato settled, add 1,240") states something new and has nothing to explain; changing
+   * a figure that already had a value contradicts what was recorded, and that needs a reason on
+   * the record. A schema cannot tell those apart without the previous amounts, so it no longer
+   * pretends to.
+   */
+  reason: z.string().trim().min(3, 'Say why the figure changed.').max(300).optional(),
 });
 
 export const listDailySalesQuerySchema = paginationQuerySchema.extend({

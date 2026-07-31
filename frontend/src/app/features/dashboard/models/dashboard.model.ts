@@ -95,6 +95,14 @@ export interface Dashboard {
   readonly recentActivity: readonly RecentActivity[];
   readonly charts: DashboardCharts;
 
+  /**
+   * Past days with no consumption sheet — newest first, today excluded.
+   *
+   * Sent to both roles. Drives the banner at the top of the dashboard; see
+   * `missingConsumption` on `ManagerDashboardComponent` for how the wording is chosen.
+   */
+  readonly unrecordedConsumptionDays?: readonly string[];
+
   /** Admin only — absent from a Store Manager's payload, not merely hidden. */
   readonly todaysPurchases?: {
     readonly count: number;
@@ -181,6 +189,25 @@ export interface Dashboard {
  * name, kept because seven call sites read better as `money(...)` on this screen.
  */
 export { moneyCompact as money } from '../../../shared/utils/format.utils';
+
+/**
+ * The calendar day before `iso`, as `YYYY-MM-DD`.
+ *
+ * Used to ask "is the newest missing consumption day *yesterday*", which decides how urgently
+ * the dashboard words its prompt.
+ *
+ * `Date.UTC` rather than the local constructor. These are calendar days with no time in them, and
+ * building a local `Date` from one puts it at local midnight — so in Mumbai (UTC+5:30) the
+ * subtraction and re-serialisation would land on the day before the one intended. Fixing the
+ * arithmetic to UTC at both ends makes it pure calendar subtraction, which is what a date without
+ * a time means. It handles month and year boundaries because `Date.UTC` normalises day 0.
+ */
+export function previousDay(iso: string): string {
+  const [year = 0, month = 1, day = 1] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day - 1));
+
+  return date.toISOString().slice(0, 10);
+}
 
 /**
  * `DD MMM` for a chart axis.

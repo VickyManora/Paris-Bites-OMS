@@ -90,7 +90,7 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
            land on it would make the panel awkward to work through from the keyboard.
            Sticky, so "Mark all read" stays reachable once ten entries are scrolling past it. -->
       <div
-        class="pb-menu-sticky-header flex items-center justify-between gap-pb-2 border-b border-outline-variant px-pb-3 py-pb-2"
+        class="pb-menu-sticky-header flex items-center justify-between gap-pb-2 border-b border-pb-border px-pb-3 py-pb-2"
         (click)="$event.stopPropagation()"
         (keydown)="$event.stopPropagation()"
         tabindex="-1"
@@ -132,7 +132,7 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
             <pb-icon name="notificationsOff" [size]="18" />
           </span>
           <p class="mt-pb-2 text-pb-body text-on-surface">You are all caught up.</p>
-          <p class="mt-0.5 text-pb-caption text-on-surface-variant">
+          <p class="mt-0.5 text-pb-caption text-pb-text-secondary">
             New approvals and stock alerts will appear here.
           </p>
         </div>
@@ -173,11 +173,11 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
                   {{ notification.title }}
                 </p>
                 <p
-                  class="m-0 mt-0.5 whitespace-normal break-words text-pb-caption text-on-surface-variant"
+                  class="m-0 mt-0.5 whitespace-normal break-words text-pb-caption text-pb-text-secondary"
                 >
                   {{ notification.body }}
                 </p>
-                <p class="m-0 mt-pb-1 text-pb-overline uppercase text-on-surface-variant">
+                <p class="m-0 mt-pb-1 text-pb-overline uppercase text-pb-text-secondary">
                   {{ notification.createdAt | pbRelativeTime }}
                 </p>
               </div>
@@ -214,7 +214,7 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time.pipe';
       <a
         mat-menu-item
         routerLink="/notifications"
-        class="pb-menu-sticky-footer !border-t !border-outline-variant"
+        class="pb-menu-sticky-footer !border-t !border-pb-border"
       >
         <span class="block w-full text-center text-pb-body font-medium text-pb-link">
           View all notifications
@@ -232,7 +232,7 @@ export class AppNotificationBellComponent {
    * without a positioned ancestor it would anchor to the page instead of the bell.
    */
   protected readonly triggerClass =
-    'relative grid h-10 w-10 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
+    'relative grid h-11 w-11 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
 
   /** Refetch on open — this is the moment the user is actually looking at it. */
   protected onOpened(): void {

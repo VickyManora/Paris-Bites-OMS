@@ -16,6 +16,10 @@ const PRODUCT_SELECT = {
   imageUrl: true,
   isAvailable: true,
   displayOrder: true,
+  // Needed by the "any 2" combo rule, which pairs bowls within one tier. Selected on every read
+  // rather than only the order path, so a product's tier is never a second query.
+  categoryId: true,
+  category: { select: { name: true } },
 } as const;
 
 function toProduct(row: {
@@ -26,6 +30,8 @@ function toProduct(row: {
   imageUrl: string | null;
   isAvailable: boolean;
   displayOrder: number;
+  categoryId: string;
+  category: { name: string } | null;
 }): ProductRow {
   return {
     id: row.id,
@@ -35,6 +41,8 @@ function toProduct(row: {
     imageUrl: row.imageUrl,
     isAvailable: row.isAvailable,
     displayOrder: row.displayOrder,
+    categoryId: row.categoryId,
+    categoryName: row.category?.name ?? '',
   };
 }
 

@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal, type Signal } from '@angular/core';
 import { AuthService } from '../../../core/auth/services/auth.service';
 import { Permission } from '../../../core/models/permission.model';
+import { previewCombos, type ComboPreview } from '../models/combo-pricing';
 import {
   DiscountType,
   STORE_MANAGER_MAX_DISCOUNT_PERCENT,
@@ -49,6 +50,21 @@ export class PosCartStore {
   private readonly customerNameState = signal('');
   private readonly customerPhoneState = signal('');
 
+  /**
+   * Resolves a product's tier, for the combo preview.
+   *
+   * A function rather than a copy of the menu: the store's job is the cart, and duplicating the
+   * catalogue into it would give the two a chance to disagree. The order page sets this once the
+   * menu has loaded; until then every lookup misses and no combo previews, which is correct —
+   * there is nothing in the cart yet either.
+   */
+  private readonly categoryOf = signal<(productId: string) => string | undefined>(() => undefined);
+
+  /** Called by the order page once the menu is in hand. */
+  setCategoryResolver(resolver: (productId: string) => string | undefined): void {
+    this.categoryOf.set(resolver);
+  }
+
   readonly lines: Signal<readonly CartLine[]> = this.linesState.asReadonly();
   readonly discountType: Signal<DiscountType> = this.discountTypeState.asReadonly();
   readonly discountValue: Signal<number> = this.discountValueState.asReadonly();
@@ -69,33 +85,62 @@ export class PosCartStore {
   );
 
   /**
-   * The discount in rupees, clamped to the subtotal.
+   * The automatic "any 2" offers, previewed.
    *
-   * Mirrors `computeTotals` on the server exactly — including the clamp, so the screen never
-   * shows a negative total that the server would then reject.
+   * The server decides the real figure; this is what the counter sees while building the cart. It
+   * has to be here rather than only on the receipt, because a cart showing ₹478 for an order that
+   * will be charged ₹399 makes the cashier read the wrong number to the customer.
+   *
+   * Needs to know which tier each product came from, which the cart does not carry — the page
+   * supplies it from the menu it already loaded.
+   */
+  readonly comboPreview: Signal<ComboPreview> = computed(() =>
+    previewCombos(this.linesState(), (productId) => this.categoryOf()(productId)),
+  );
+
+  readonly comboDiscount: Signal<number> = computed(() => this.comboPreview().discount);
+
+  /** What is owed once the shop's own offers are applied, before any staff discount. */
+  private readonly afterCombo: Signal<number> = computed(() =>
+    round(this.subtotal() - this.comboDiscount()),
+  );
+
+  /**
+   * The discount in rupees, clamped to what is left after the combo.
+   *
+   * Mirrors `computeTotals` on the server exactly — including the clamp and the order of
+   * operations, so the screen never shows a total the server would then disagree with. A
+   * percentage applies to the post-combo figure, because "10% off" on a combo order means 10% off
+   * the combo price, which is what anyone at the counter would expect.
    */
   readonly discountAmount: Signal<number> = computed(() => {
-    const subtotal = this.subtotal();
+    const base = this.afterCombo();
     const value = this.discountValueState();
 
     const raw =
       this.discountTypeState() === DiscountType.PERCENTAGE
-        ? (subtotal * value) / 100
+        ? (base * value) / 100
         : this.discountTypeState() === DiscountType.FLAT
           ? value
           : 0;
 
-    return round(Math.min(Math.max(raw, 0), subtotal));
+    return round(Math.min(Math.max(raw, 0), base));
   });
 
   readonly grandTotal: Signal<number> = computed(() =>
-    round(this.subtotal() - this.discountAmount()),
+    round(this.afterCombo() - this.discountAmount()),
   );
 
-  /** The discount as a percentage, whichever way it was entered. */
+  /**
+   * The staff discount as a percentage of what was still owed after the combo.
+   *
+   * Measured against the post-combo figure to match the server's ceiling check. Against the raw
+   * subtotal, the shop's own promotion would be spending the manager's discount authority — a
+   * 2×Blueberry pair is already 16.5% off, which is most of a Store Manager's 20%.
+   */
   readonly discountPercent: Signal<number> = computed(() => {
-    const subtotal = this.subtotal();
-    return subtotal <= 0 ? 0 : round((this.discountAmount() / subtotal) * 100);
+    const base = this.afterCombo();
+    return base <= 0 ? 0 : round((this.discountAmount() / base) * 100);
   });
 
   readonly canDiscountFreely: Signal<boolean> = computed(() =>

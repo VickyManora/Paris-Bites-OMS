@@ -7,6 +7,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
 } from '../enums/pos.enum.js';
+import { Money } from '../value-objects/money.js';
 
 export interface SalesOrderItemProps {
   readonly id: string;
@@ -42,6 +43,9 @@ export interface SalesOrderProps {
   readonly discountValue: number;
   readonly discountAmount: number;
   readonly discountReason: string | null;
+  /** What the automatic "any 2" offers took off. Separate from the staff discount above. */
+  readonly comboDiscountAmount: number;
+  readonly comboCount: number;
   readonly grandTotal: number;
 
   readonly notes: string | null;
@@ -102,6 +106,14 @@ export class SalesOrder {
 
   get discountAmount(): number {
     return this.props.discountAmount;
+  }
+
+  get comboDiscountAmount(): number {
+    return this.props.comboDiscountAmount;
+  }
+
+  get comboCount(): number {
+    return this.props.comboCount;
   }
 
   get grandTotal(): number {
@@ -199,6 +211,9 @@ export interface PricedOrderLine {
 
 export interface OrderTotals {
   readonly subtotal: number;
+  /** Taken off by the automatic "any 2" offers, before any staff discount. */
+  readonly comboDiscount: number;
+  /** The discretionary reduction a staff member gave. Subject to a reason and the role ceiling. */
   readonly discountAmount: number;
   readonly grandTotal: number;
 }
@@ -222,6 +237,58 @@ export function priceLines(
   }));
 }
 
+/** One tender against an order: a method and what was paid with it. */
+export interface OrderTender {
+  readonly method: PaymentMethod;
+  readonly amount: number;
+}
+
+/** Why a set of tenders is not acceptable, or `null` when it is. */
+export type TenderProblem = 'DUPLICATE_METHOD' | 'NON_POSITIVE_AMOUNT' | 'DOES_NOT_MATCH_TOTAL';
+
+/**
+ * Checks the tenders a customer paid with against what the order is worth.
+ *
+ * A domain rule rather than a validator, because it is the same rule wherever a split is recorded —
+ * at the counter, by an import, by a correction — and because it is about money rather than about
+ * the shape of a request.
+ *
+ * Three ways a split can be wrong, and each is a different mistake:
+ *
+ * - **A repeated method.** Two cash rows on one order describe nothing a counter can mean, and they
+ *   make the per-method totals in reporting ambiguous — is that one payment recorded twice, or two?
+ * - **A non-positive amount.** A zero tender is a method the cashier selected and did not use; a
+ *   negative one is a refund, which is a different flow with its own audit trail.
+ * - **A sum that is not the total.** This is the one that matters: accepting it would mark an order
+ *   PAID against less money than it is worth, and the shortfall would never appear anywhere — the
+ *   order reads as settled and the day's takings are simply lower than the day's sales.
+ *
+ * ## Compared in paise
+ *
+ * `0.1 + 0.2 !== 0.3`, so comparing rupee floats would reject a legitimate 200 + 247 on some inputs
+ * and accept a payment a paisa short on others. `Money.sum` adds as integer minor units and both
+ * sides are rounded to the stored scale before the equality.
+ *
+ * Returns the problem rather than throwing, so the caller decides how it surfaces — the use case
+ * raises a `BusinessRuleError` with the two figures in it, and a future importer might collect them.
+ */
+export function checkTenders(
+  tenders: readonly OrderTender[],
+  grandTotal: number,
+): TenderProblem | null {
+  if (new Set(tenders.map((tender) => tender.method)).size !== tenders.length) {
+    return 'DUPLICATE_METHOD';
+  }
+
+  if (tenders.some((tender) => !(tender.amount > 0))) {
+    return 'NON_POSITIVE_AMOUNT';
+  }
+
+  const tendered = Money.sum(tenders.map((tender) => tender.amount));
+
+  return Money.round(tendered) === Money.round(grandTotal) ? null : 'DOES_NOT_MATCH_TOTAL';
+}
+
 /**
  * Totals an order.
  *
@@ -234,19 +301,40 @@ export function computeTotals(
   lines: readonly PricedOrderLine[],
   discountType: DiscountType,
   discountValue: number,
+  /**
+   * What the automatic "any 2" offers already took off, from `applyCombos`.
+   *
+   * Applied **before** the staff discount and clamped separately, which is what keeps the two
+   * kinds of reduction from being confused for each other. A percentage discount then works on
+   * what is actually still owed rather than on a subtotal the customer was never going to pay —
+   * "10% off" on a combo order means 10% off the combo price, which is what anyone would expect
+   * standing at the counter.
+   *
+   * Defaults to zero so every existing caller and test is unaffected.
+   */
+  comboDiscount = 0,
 ): OrderTotals {
   const subtotal = round(lines.reduce((sum, line) => sum + line.lineTotal, 0));
 
+  const combo = round(Math.min(Math.max(comboDiscount, 0), subtotal));
+  const afterCombo = round(subtotal - combo);
+
   const raw =
     discountType === DiscountType.PERCENTAGE
-      ? (subtotal * discountValue) / 100
+      ? (afterCombo * discountValue) / 100
       : discountType === DiscountType.FLAT
         ? discountValue
         : 0;
 
-  const discountAmount = round(Math.min(Math.max(raw, 0), subtotal));
+  // Clamped to what remains after the combo, so the two together can never exceed the order.
+  const discountAmount = round(Math.min(Math.max(raw, 0), afterCombo));
 
-  return { subtotal, discountAmount, grandTotal: round(subtotal - discountAmount) };
+  return {
+    subtotal,
+    comboDiscount: combo,
+    discountAmount,
+    grandTotal: round(afterCombo - discountAmount),
+  };
 }
 
 /**

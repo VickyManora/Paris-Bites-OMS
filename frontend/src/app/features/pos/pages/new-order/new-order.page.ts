@@ -17,6 +17,7 @@ import { Router } from '@angular/router';
 import { map } from 'rxjs';
 import type { AppError } from '../../../../core/errors/app-error';
 import { OnlineStatusService } from '../../../../core/services/online-status.service';
+import { ConfirmDialogService } from '../../../../shared/components/confirm-dialog/confirm-dialog.service';
 import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { SpinnerComponent } from '../../../../shared/components/spinner/spinner.component';
 import {
@@ -32,6 +33,7 @@ import {
 } from '../../components/payment-sheet/payment-sheet.component';
 import type { MenuCategory, Product } from '../../models/pos.model';
 import { UPI_QR_SRC } from '../../models/upi-qr';
+import { findPackagingProduct, waffleProductIds } from '../../models/waffle-packaging';
 import { PosCartStore } from '../../services/pos-cart-store.service';
 import { PosService } from '../../services/pos.service';
 
@@ -493,7 +495,7 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
                   class="flex aspect-square w-full items-center justify-center bg-pos-pink/40 text-5xl"
                   aria-hidden="true"
                 >
-                  🍫
+                  {{ fallbackIcon(product) }}
                 </span>
               }
             </ng-template>
@@ -653,6 +655,7 @@ export class NewOrderPage implements OnInit {
   protected readonly cart = inject(PosCartStore);
   private readonly service = inject(PosService);
   private readonly dialog = inject(MatDialog);
+  private readonly confirm = inject(ConfirmDialogService);
   private readonly router = inject(Router);
   private readonly breakpoints = inject(BreakpointObserver);
 
@@ -775,6 +778,20 @@ export class NewOrderPage implements OnInit {
     this.service.menu(true).subscribe({
       next: (menu) => {
         this.menu.set(menu);
+
+        /*
+         * Hand the cart a way to look up a product's tier.
+         *
+         * The combo preview needs it and the cart deliberately does not hold the catalogue — this
+         * is the one place that knows both. Built once per load rather than per keystroke.
+         */
+        const tierByProduct = new Map<string, string>();
+        for (const category of menu) {
+          for (const product of category.products) {
+            tierByProduct.set(product.id, category.name);
+          }
+        }
+        this.cart.setCategoryResolver((productId) => tierByProduct.get(productId));
         this.loading.set(false);
         this.focusSearch();
       },
@@ -797,6 +814,16 @@ export class NewOrderPage implements OnInit {
     this.menu().reduce((sum, category) => sum + category.products.length, 0),
   );
 
+  /**
+   * Which products are waffles, and the box to charge for. Both derived from the loaded menu.
+   *
+   * Computed rather than resolved once in the load callback so they stay correct if the menu is
+   * refetched — a retry after a failed load, or an availability change. See `waffle-packaging.ts`
+   * for why these are matched by name.
+   */
+  private readonly waffleIds = computed(() => waffleProductIds(this.menu()));
+  private readonly packagingProduct = computed(() => findPackagingProduct(this.menu()));
+
   protected readonly visibleProducts = computed<readonly Product[]>(() => {
     const term = this.search().trim().toLowerCase();
     const categories = this.menu();
@@ -812,6 +839,37 @@ export class NewOrderPage implements OnInit {
 
     return pool.filter((product) => product.name.toLowerCase().includes(term));
   });
+
+  /**
+   * Each product's category emoji, for the card that has no photo yet.
+   *
+   * `visibleProducts` deliberately flattens to a `Product[]` so the grid can mix categories under
+   * search and the All chip, which loses the category the product came from — hence a lookup rather
+   * than reading it off the row.
+   *
+   * This used to be a hardcoded 🍫 in the template. That was invisible while every category was
+   * chocolate or waffle, and wrong the moment it was not: a ₹10 takeaway packaging charge rendered
+   * as a bar of chocolate. `menu-master.ts` already documents the fallback as *the category emoji*,
+   * so the template was the thing disagreeing with the intent.
+   */
+  private readonly categoryIconByProduct = computed(() => {
+    const map = new Map<string, string>();
+
+    for (const category of this.menu()) {
+      for (const product of category.products) {
+        if (category.icon !== null && category.icon.length > 0) {
+          map.set(product.id, category.icon);
+        }
+      }
+    }
+
+    return map;
+  });
+
+  /** 🍫 remains the last resort, for a category that never set an icon. */
+  protected fallbackIcon(product: Product): string {
+    return this.categoryIconByProduct().get(product.id) ?? '🍫';
+  }
 
   protected fmt(value: number): string {
     return money(value);
@@ -922,26 +980,85 @@ export class NewOrderPage implements OnInit {
     this.search.set('');
   }
 
-  protected add(product: Product): void {
+  /**
+   * Adds a product, and asks about a box when it is a waffle.
+   *
+   * The waffle goes in **before** the prompt opens, deliberately. The cashier tapped a product and
+   * the cart must show it immediately; making the line wait on an answer would mean a visible pause
+   * between the tap and the total, on the one screen where that is least acceptable. Declining the
+   * box then changes nothing rather than undoing something.
+   *
+   * `void`-returning despite awaiting, because it is a template handler — a click has nobody to
+   * return a promise to. Rejections cannot escape: `ask` resolves rather than throws on dismissal.
+   */
+  protected async add(product: Product): Promise<void> {
     if (!product.isAvailable) {
       return;
     }
 
     this.cart.add(product);
+
+    await this.offerPackaging(product);
   }
 
   /**
    * Enter adds the first match and clears the box.
    *
    * The keyboard path for a counter with one: three letters, Enter, repeat. No pointer at all.
+   *
+   * Routed through `add` rather than calling `cart.add` directly, so the keyboard path gets the
+   * packaging prompt too. It had its own call to the store before, which is exactly how a rule ends
+   * up applying on one of two routes into the same action.
    */
-  protected addTopMatch(): void {
+  protected async addTopMatch(): Promise<void> {
     const first = this.visibleProducts().find((product) => product.isAvailable);
 
-    if (first !== undefined) {
-      this.cart.add(first);
-      this.search.set('');
-      this.focusSearch();
+    if (first === undefined) {
+      return;
+    }
+
+    this.search.set('');
+    this.focusSearch();
+
+    await this.add(first);
+  }
+
+  /**
+   * Asks whether a waffle is being taken away, and charges for the box if it is.
+   *
+   * Asked per waffle added, so three waffles is three questions and three boxes — which is the
+   * honest model: two friends eating in and one order to go is one box, not three, and nothing
+   * cheaper than asking can tell those apart.
+   *
+   * Silent — no prompt at all — when the product is not a waffle, or when the packaging product is
+   * missing or sold out. See `findPackagingProduct` for why availability decides this here.
+   *
+   * A dismissed dialog counts as "eating in". `ConfirmDialogService` resolves Escape and a backdrop
+   * click to `false`, and declining is the answer that adds nothing, so an accidental dismissal
+   * leaves the cart exactly as the tap left it rather than charging for a box nobody asked for.
+   */
+  private async offerPackaging(product: Product): Promise<void> {
+    if (!this.waffleIds().has(product.id)) {
+      return;
+    }
+
+    const packaging = this.packagingProduct();
+
+    if (packaging === null) {
+      return;
+    }
+
+    const wantsBox = await this.confirm.ask({
+      title: 'Packing this waffle?',
+      message: `${product.name} — is it going in a box to take away?`,
+      detail: `Adds ${money(packaging.price)} for ${packaging.name}.`,
+      confirmLabel: 'Yes, pack it',
+      cancelLabel: 'No, eating in',
+      icon: 'takeout_dining',
+    });
+
+    if (wantsBox) {
+      this.cart.add(packaging);
     }
   }
 
@@ -1019,10 +1136,10 @@ export class NewOrderPage implements OnInit {
           ...(discountAmount > 0 ? { discountReason: this.cart.discountReason().trim() } : {}),
           ...(this.cart.notes().trim().length === 0 ? {} : { notes: this.cart.notes().trim() }),
           customer: this.cart.customerPayload(),
-          payment: {
-            method: payment.method,
-            ...(payment.reference === undefined ? {} : { reference: payment.reference }),
-          },
+          // Straight through from the sheet: it already resolved a single method into a split of
+          // one, so this page has no branch for how the customer paid. The server re-checks that
+          // the amounts add up to its own total — see `checkTenders`.
+          payments: payment.payments,
         },
         this.attemptKey,
       )

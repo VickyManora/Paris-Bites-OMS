@@ -1,5 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormBuilder,
+  ReactiveFormsModule,
+  Validators,
+  type AbstractControl,
+  type ValidationErrors,
+} from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../core/auth/services/auth.service';
 import { AppRoutes } from '../../../../core/constants/app.constants';
@@ -8,6 +14,40 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { InlineAlertComponent } from '../../../../shared/components/inline-alert/inline-alert.component';
 import { MATERIAL_FORM_IMPORTS } from '../../../../shared/material/material-imports';
 import { applyServerErrors, firstErrorMessage } from '../../../../shared/utils/form.utils';
+import { environment } from '../../../../../environments/environment';
+
+/**
+ * Whether a bare account name may be typed instead of an address.
+ *
+ * Development builds only, matching the API's `DEV_LOGIN_DOMAIN`: the server is what expands
+ * `admin` to `admin@parisbites.local`, and it refuses to do so in production. Relaxing the form
+ * without that expansion would only replace an inline "must be a valid email" with a round trip
+ * that comes back "incorrect email or password" — a worse version of the same rejection.
+ */
+const ALLOWS_BARE_USERNAME = !environment.production;
+
+/** Bare names are restricted to what can appear in the local part of the address it becomes. */
+const BARE_USERNAME = /^[a-z0-9._-]+$/i;
+
+/**
+ * Accepts an e-mail address, plus a bare account name in development.
+ *
+ * Emptiness is deliberately not reported here — `Validators.required` already owns that, and
+ * returning both makes `firstErrorMessage` pick between two messages describing one problem.
+ */
+function loginIdentifier(control: AbstractControl): ValidationErrors | null {
+  const value = typeof control.value === 'string' ? control.value.trim() : '';
+
+  if (value.length === 0) {
+    return null;
+  }
+
+  if (ALLOWS_BARE_USERNAME && !value.includes('@') && BARE_USERNAME.test(value)) {
+    return null;
+  }
+
+  return Validators.email(control);
+}
 
 /**
  * Sign-in page.
@@ -48,13 +88,16 @@ import { applyServerErrors, firstErrorMessage } from '../../../../shared/utils/f
       }
 
       <mat-form-field subscriptSizing="dynamic">
-        <mat-label>Email</mat-label>
+        <mat-label>{{ allowsBareUsername ? 'Email or username' : 'Email' }}</mat-label>
+        <!-- 'attr.inputmode' because inputmode is an attribute, not a DOM property — a plain
+             '[inputmode]' binding fails the template compiler with NG8002. Backticks are
+             avoided in here on purpose: this comment sits inside a template literal. -->
         <input
           matInput
-          type="email"
+          [type]="allowsBareUsername ? 'text' : 'email'"
           formControlName="email"
           autocomplete="username"
-          inputmode="email"
+          [attr.inputmode]="allowsBareUsername ? 'text' : 'email'"
           autocapitalize="none"
           spellcheck="false"
           required
@@ -125,11 +168,14 @@ export class LoginPage {
    * a policy change, and tell an attacker what the policy is.
    */
   protected readonly form = this.formBuilder.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
+    email: ['', [Validators.required, loginIdentifier]],
     password: ['', [Validators.required]],
   });
 
   protected readonly submitting = signal(false);
+  /** Drives the field's label and type. See `ALLOWS_BARE_USERNAME`. */
+  protected readonly allowsBareUsername = ALLOWS_BARE_USERNAME;
+
   protected readonly passwordVisible = signal(false);
   /** Form-level message, e.g. "email or password is incorrect". */
   protected readonly formError = signal<string | null>(null);

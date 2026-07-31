@@ -104,12 +104,32 @@ export type Permission = (typeof Permission)[keyof typeof Permission];
 export const ALL_PERMISSIONS: readonly Permission[] = Object.values(Permission);
 
 /**
- * What a Store Manager may do: run the store day to day.
+ * What a Store Manager may do: run the cart, shift to shift.
  *
- * They read and maintain products, move stock, deal with suppliers, raise purchase orders,
- * and request and receive stock transfers. They cannot manage user accounts, approve their
- * own purchase orders or transfers, write off stock, read the audit trail, or see financial
- * reporting — the places where an unchecked mistake or a bad actor does real damage.
+ * The role is scoped to the four things the person on the cart actually does — sell at the
+ * counter, keep the cart's stock straight, record what was used, and ask the warehouse for
+ * more. Everything else is withheld.
+ *
+ * ## Buying and reporting are deliberately not here
+ *
+ * `SUPPLIER_*`, `PURCHASE_ORDER_*` and `REPORT_VIEW` were all granted to this role
+ * originally, on a reading of "store manager" as someone who runs a shop end to end
+ * including its buying. That is not this role: the cart is supplied by the warehouse through
+ * stock transfers, not by its own purchase orders, so supplier and invoice screens were
+ * capability the person on the counter never used and could still be talked into using.
+ *
+ * `REPORT_VIEW` is withheld for the narrower reason that a report aggregates across
+ * locations and dates. `REPORT_VIEW_FINANCIAL` already kept margins and valuation out, but
+ * the non-financial reports still answer questions about the business rather than about
+ * today's cart, and this role is scoped to the latter.
+ *
+ * What remains withheld for the original reasons: user administration, self-approval of
+ * transfers, stock write-offs, the audit trail, and anything financial — the places where an
+ * unchecked mistake or a bad actor does real damage.
+ *
+ * Removing a permission from this list is safe by construction. Routes declare what they
+ * need and the sidebar is gated on the same permissions, so dropping one closes the API, the
+ * direct URL and the menu entry together; there is no fourth place to remember.
  */
 const STORE_MANAGER_PERMISSIONS: readonly Permission[] = [
   Permission.PRODUCT_READ,
@@ -119,19 +139,11 @@ const STORE_MANAGER_PERMISSIONS: readonly Permission[] = [
   Permission.STOCK_READ,
   Permission.STOCK_ADJUST,
 
-  // Requests a transfer and confirms its arrival at the cart, but cannot approve it —
-  // the same separation as purchase orders.
+  // Requests a transfer and confirms its arrival at the cart, but cannot approve it: the
+  // request and the authorisation must not be the same person.
   Permission.TRANSFER_READ,
   Permission.TRANSFER_CREATE,
   Permission.TRANSFER_COMPLETE,
-
-  Permission.SUPPLIER_READ,
-  Permission.SUPPLIER_MANAGE,
-
-  Permission.PURCHASE_ORDER_READ,
-  Permission.PURCHASE_ORDER_CREATE,
-
-  Permission.REPORT_VIEW,
 
   // The counter. Deliberately without POS_ORDER_READ_ALL, POS_ORDER_CANCEL or
   // POS_DISCOUNT_UNLIMITED: taking orders is their job, reversing them is not.

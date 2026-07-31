@@ -17,11 +17,13 @@ import { money, timestamp } from '../../../../shared/utils/format.utils';
 import {
   ORDER_STATUS_STYLE,
   PAYMENT_METHODS,
+  PaymentMethod,
   type Order,
-  type PaymentMethod,
+  type OrderPayment,
 } from '../../models/pos.model';
 import { PosService } from '../../services/pos.service';
 import type { PbIconName } from '../../../../shared/components/icon/icon-registry';
+import { IconComponent } from '../../../../shared/components/icon/icon.component';
 
 export interface OrderDetailDialogData {
   readonly orderId: string;
@@ -39,6 +41,7 @@ export interface OrderDetailDialogData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatDialogModule,
+    IconComponent,
     SpinnerComponent,
     StatusBadgeComponent,
     HasPermissionDirective,
@@ -117,20 +120,94 @@ export interface OrderDetailDialogData {
         </dl>
 
         @if (detail.payments.length > 0) {
-          <h3 class="text-pb-subtitle mb-1 mt-4">Payment</h3>
-          <ul class="m-0 flex list-none flex-col gap-1 p-0">
+          <!--
+            The tenders, as a table rather than a sentence per row.
+
+            This was one caption line per payment — "Cash · ₹200.00 · confirmed by Paris Admin" —
+            which reads as a log entry and hides the figures in the middle of a run of text. On a
+            split that is the wrong shape: the reader is checking two amounts against a total, so
+            the amounts have to line up in a column and be tabular.
+
+            The header names the count, because "Payment" over two rows leaves the reader to work
+            out whether they are two tenders or one payment listed twice.
+          -->
+          <h3 class="m-0 mb-pb-2 mt-pb-4 text-pb-subtitle font-semibold text-pb-text">
+            {{ detail.payments.length === 1 ? 'Payment' : 'Split payment' }}
+            @if (detail.payments.length > 1) {
+              <span class="font-normal text-pb-text-secondary">
+                · {{ detail.payments.length }} tenders
+              </span>
+            }
+          </h3>
+
+          <ul
+            class="m-0 flex list-none flex-col divide-y divide-pb-border-subtle rounded-pb-lg border border-pb-border p-0"
+          >
             @for (payment of detail.payments; track payment.id) {
-              <li class="text-pb-caption">
-                {{ payment.methodLabel }} · {{ fmt(payment.amount) }}
-                @if (payment.reference !== null) {
-                  · ref {{ payment.reference }}
-                }
-                @if (payment.confirmedByName !== null) {
-                  · confirmed by {{ payment.confirmedByName }}
-                }
+              <li class="flex items-start gap-pb-3 px-pb-3 py-pb-2">
+                <span
+                  class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-pb-md bg-pb-surface-sunken text-pb-text-secondary"
+                  aria-hidden="true"
+                >
+                  <pb-icon [name]="paymentIcon(payment)" [size]="14" />
+                </span>
+
+                <span class="min-w-0 flex-1">
+                  <span class="block text-pb-body font-medium text-pb-text">
+                    {{ payment.methodLabel }}
+                  </span>
+                  @if (payment.reference !== null || payment.confirmedByName !== null) {
+                    <span class="block text-pb-caption text-pb-text-muted">
+                      @if (payment.reference !== null) {
+                        ref {{ payment.reference }}
+                      }
+                      @if (payment.reference !== null && payment.confirmedByName !== null) {
+                        ·
+                      }
+                      @if (payment.confirmedByName !== null) {
+                        confirmed by {{ payment.confirmedByName }}
+                      }
+                    </span>
+                  }
+                </span>
+
+                <span class="shrink-0 text-pb-body font-semibold tabular-nums text-pb-text">
+                  {{ fmt(payment.amount) }}
+                </span>
+              </li>
+            }
+
+            <!--
+              The tenders totalled, only when there is more than one.
+
+              This is the line that makes a split checkable at a glance: two amounts and the sum
+              they have to reach. With a single payment it would restate the row above it.
+            -->
+            @if (detail.payments.length > 1) {
+              <li
+                class="flex items-baseline justify-between gap-pb-3 bg-pb-surface-sunken px-pb-3 py-pb-2"
+              >
+                <span class="text-pb-caption font-semibold uppercase text-pb-text-secondary">
+                  Total received
+                </span>
+                <span class="text-pb-subtitle font-bold tabular-nums text-pb-text">
+                  {{ fmt(detail.amountPaid) }}
+                </span>
               </li>
             }
           </ul>
+
+          <!--
+            Only when something is still owed — which for an order placed at the counter is never,
+            since the server refuses a payment set that does not cover the total. It exists for an
+            order settled in parts through the separate payment endpoint, where a partial balance is
+            a real state rather than an impossible one.
+          -->
+          @if (detail.amountDue > 0) {
+            <p class="pb-tone-warning m-0 mt-pb-2 rounded-pb-lg border p-pb-2 text-pb-caption">
+              {{ fmt(detail.amountDue) }} still outstanding.
+            </p>
+          }
         }
 
         @if (detail.notes !== null) {
@@ -276,6 +353,11 @@ export class OrderDetailDialogComponent {
 
   protected when(iso: string): string {
     return timestamp(iso);
+  }
+
+  /** Cash or the QR, so a split is scannable by shape before the labels are read. */
+  protected paymentIcon(payment: OrderPayment): PbIconName {
+    return payment.method === PaymentMethod.UPI ? 'qr' : 'cash';
   }
 
   protected statusIcon(order: Order): PbIconName {

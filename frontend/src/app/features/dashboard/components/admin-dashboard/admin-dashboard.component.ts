@@ -104,10 +104,24 @@ import { money, shortDate, type Dashboard } from '../../models/dashboard.model';
             record.
           -->
           @if (!salesRecorded()) {
+            <!--
+              The badge, only when the headline number came from the till.
+
+              Without it the card is indistinguishable from a written-up day, and the two carry
+              different weight: one is a figure somebody confirmed, the other is what the POS happens
+              to have so far and excludes every aggregator order.
+            -->
+            @if (salesProvisional()) {
+              <span class="pb-badge pb-badge-pill pb-tone-warning mt-pb-2 self-start">
+                <pb-icon name="clock" [size]="14" />
+                From the till · not yet confirmed
+              </span>
+            }
+
             <!-- 'mt-auto' pins it to the card's baseline; see the note in the hero component. -->
             <a matButton="filled" class="mt-auto self-start" [routerLink]="['/sales']">
               <pb-icon name="edit" [size]="16" class="mr-pb-1" />
-              Enter today's takings
+              {{ salesProvisional() ? "Confirm today's takings" : "Enter today's takings" }}
             </a>
           }
         </pb-hero-metric>
@@ -714,19 +728,54 @@ export class AdminDashboardComponent {
   // ---------------------------------------------------------------------------
 
   /**
-   * An em dash, not ₹0.00, when the day has not been entered.
+   * The declared total once written up, the till's figure before that, an em dash if neither.
    *
-   * These are two different facts and only one of them is bad news. A confident ₹0.00 on
-   * a Saturday evening reads as "we sold nothing today", which is the sort of number that
-   * gets screenshotted before anyone checks whether it was simply not typed in yet.
+   * ## Why the till fills the gap
+   *
+   * This used to be a bare em dash all day until somebody entered the takings at close, which meant
+   * the largest number on the landing page said nothing for the entire trading day — while the POS
+   * two tiles over already knew what the counter had rung up. The em dash is still right when there
+   * is genuinely nothing to show, but "no declared entry yet" and "no idea what today took" are
+   * different facts, and only the second deserves a blank.
+   *
+   * It is still never ₹0.00 on an unrecorded day. A confident zero on a Saturday evening reads as
+   * "we sold nothing today", which is the sort of number that gets screenshotted before anyone
+   * checks whether it was simply not typed in yet.
+   *
+   * ## It is provisional, and the card says so
+   *
+   * The caption carries the provenance and `salesProvisional` drives a badge, because a figure that
+   * looks like the declared total but is not would quietly undermine the one comparison this app
+   * makes between the two — the till and the declared entry describe the same walk-in trade from two
+   * sources, and the variance between them is the control. Aggregator takings are also absent from
+   * the till figure by definition, so on a Zomato day the provisional number is genuinely lower than
+   * the day's real total; saying "from the till" is what keeps that honest.
    */
   protected readonly todaysSalesValue = computed(() => {
     const sales = this.data().todaysSales;
-    return sales === undefined || !sales.recorded ? '—' : money(sales.total);
+
+    if (sales?.recorded === true) {
+      return money(sales.total);
+    }
+
+    const till = this.data().posToday;
+
+    return till !== undefined && till.revenue > 0 ? money(till.revenue) : '—';
   });
 
   /** Drives the hero's prompt. Reads the same `recorded` flag the em dash above is decided by. */
   protected readonly salesRecorded = computed(() => this.data().todaysSales?.recorded === true);
+
+  /** True when the headline figure is the till's rather than a declared entry. */
+  protected readonly salesProvisional = computed(() => {
+    if (this.salesRecorded()) {
+      return false;
+    }
+
+    const till = this.data().posToday;
+
+    return till !== undefined && till.revenue > 0;
+  });
 
   protected readonly todaysSalesCaption = computed(() => {
     const sales = this.data().todaysSales;
@@ -734,7 +783,14 @@ export class AdminDashboardComponent {
     if (sales === undefined) {
       return '';
     }
+
     if (!sales.recorded) {
+      const till = this.data().posToday;
+
+      if (till !== undefined && till.revenue > 0) {
+        return `${money(till.cash)} cash · ${money(till.online)} online at the counter`;
+      }
+
       return 'not recorded yet';
     }
 

@@ -50,6 +50,8 @@ export const PosMapper = {
       discountType: props.discountType,
       discountValue: props.discountValue,
       discountAmount: props.discountAmount,
+      comboDiscountAmount: props.comboDiscountAmount,
+      comboCount: props.comboCount,
       discountReason: props.discountReason,
       grandTotal: props.grandTotal,
       notes: props.notes,

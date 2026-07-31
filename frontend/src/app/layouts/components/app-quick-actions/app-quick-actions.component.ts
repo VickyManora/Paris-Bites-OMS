@@ -16,7 +16,7 @@ interface QuickAction {
 }
 
 /**
- * The four things someone signs in to *do*, one click from anywhere.
+ * The handful of things someone signs in to *do*, one click from anywhere.
  *
  * **These only navigate.** Every entry is a `routerLink` to a screen that already exists; nothing
  * here creates, submits or mutates anything. That boundary is deliberate — a shell that starts
@@ -62,7 +62,7 @@ interface QuickAction {
 
       <mat-menu #menu="matMenu" class="pb-shell-menu">
         <p
-          class="m-0 px-pb-3 pb-pb-1 pt-pb-2 text-pb-overline uppercase text-on-surface-variant"
+          class="m-0 px-pb-3 pb-pb-1 pt-pb-2 text-pb-overline uppercase text-pb-text-secondary"
           aria-hidden="true"
         >
           Quick actions
@@ -74,7 +74,7 @@ interface QuickAction {
             <span class="text-pb-body">{{ action.label }}</span>
             <!-- Which part of the business the destination belongs to, not a keyboard shortcut — so
                  plain muted text rather than the 'pb-kbd' chrome the search hint uses. -->
-            <span class="ml-auto pl-pb-4 text-pb-caption text-on-surface-variant">
+            <span class="ml-auto pl-pb-4 text-pb-caption text-pb-text-secondary">
               {{ action.hint }}
             </span>
           </a>
@@ -88,8 +88,15 @@ export class AppQuickActionsComponent {
 
   /** `group` so the inner square can respond to the button's own hover. */
   protected readonly triggerClass =
-    'group grid h-10 w-10 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
+    'group grid h-11 w-11 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
 
+  /*
+   * Ordered to match the sidebar: selling, then stock, then buying.
+   *
+   * The list is the same for everyone and filtered per user, so the order has to read sensibly
+   * after filtering as well as before. For a Store Manager the first three survive and the last
+   * two disappear, leaving exactly the three things that role does in a shift.
+   */
   private static readonly ALL: readonly QuickAction[] = [
     {
       label: 'New order',
@@ -99,11 +106,19 @@ export class AppQuickActionsComponent {
       permission: Permission.POS_OPERATE,
     },
     {
-      label: 'Record purchase',
-      hint: 'Invoice',
-      icon: 'purchases',
-      route: '/purchases/record',
-      permission: Permission.PURCHASE_ORDER_CREATE,
+      /*
+       * Gated on `STOCK_ADJUST` rather than `STOCK_READ`.
+       *
+       * The destination is the consumption list, which only needs read — but this entry offers to
+       * *record*, and the endpoint behind that requires `STOCK_ADJUST`. Gating on read would put
+       * "Record consumption" in front of someone who could open the screen and then fail at the
+       * save, which is the access-denied page arriving one step later than it should.
+       */
+      label: 'Record consumption',
+      hint: 'Stock',
+      icon: 'consumption',
+      route: '/consumption',
+      permission: Permission.STOCK_ADJUST,
     },
     {
       label: 'New transfer',
@@ -111,6 +126,13 @@ export class AppQuickActionsComponent {
       icon: 'transfers',
       route: '/transfers',
       permission: Permission.TRANSFER_CREATE,
+    },
+    {
+      label: 'Record purchase',
+      hint: 'Invoice',
+      icon: 'purchases',
+      route: '/purchases/record',
+      permission: Permission.PURCHASE_ORDER_CREATE,
     },
     {
       label: 'Daily sales',

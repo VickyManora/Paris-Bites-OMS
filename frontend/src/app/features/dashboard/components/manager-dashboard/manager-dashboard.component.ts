@@ -1,202 +1,118 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CardComponent } from '../../../../shared/components/card/card.component';
-import {
-  ChartComponent,
-  type ChartSpec,
-} from '../../../../shared/components/chart/chart.component';
-import { EmptyStateComponent } from '../../../../shared/components/empty-state/empty-state.component';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
 import { MATERIAL_CORE_IMPORTS } from '../../../../shared/material/material-imports';
-import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
 import { DashboardSectionComponent } from '../dashboard-section/dashboard-section.component';
-import { HeroMetricComponent } from '../hero-metric/hero-metric.component';
-import { MetricStripComponent, type StripMetric } from '../metric-strip/metric-strip.component';
 import { MetricTileComponent } from '../metric-tile/metric-tile.component';
 import { LowStockPanelComponent } from '../low-stock-panel/low-stock-panel.component';
-import { TasksPanelComponent } from '../tasks-panel/tasks-panel.component';
-import { shortDate, type Dashboard } from '../../models/dashboard.model';
+import { previousDay, shortDate, type Dashboard } from '../../models/dashboard.model';
+
+/** The consumption banner's content, or `null` when every day is accounted for. */
+interface ConsumptionPrompt {
+  readonly tone: 'info' | 'warning';
+  readonly message: string;
+  readonly action: string;
+}
 
 /**
- * The person running the day: what has been used, what is waiting, what to do next.
+ * The person running the cart: what needs restocking, and what they still owe a record of.
  *
- * No money anywhere. Stock valuation and purchase spend are not merely hidden from this
- * layout — the API never sends them to a Store Manager, so there is nothing here to leak.
+ * No money anywhere. Stock valuation and revenue are not merely hidden from this layout — the API
+ * never sends them to a Store Manager, so there is nothing here to leak.
  *
- * ## A different hero, for a different question
+ * ## Deliberately three things, and not the fourth
  *
- * The admin's hero figure is today's takings. This role's is **how much needs doing**, because the
- * question someone opens this screen with is "what do I do now", not "how did the month go" — and it
- * is the one number here that should stop them if it is large.
+ * This layout used to carry a task hero, five tiles, a tasks panel, an activity feed and two charts.
+ * All of it was true and almost none of it was *actionable by this role*, which is the only test a
+ * dashboard for the counter should pass. A movement chart over thirty days answers a question about
+ * the business; the person on the cart is asking "what do I need, and what have I not written down".
  *
- * It carries no sparkline. Task counts are derived from live state and there is no history of them in
- * the payload, so there is no series to draw — and inventing a flat line under a figure would imply a
- * steadiness nobody measured. A trend is drawn where data exists, and here it does not.
+ * So: the record they owe, the stock that is short, and the list of which items. The activity feed
+ * and the charts are gone rather than collapsed — a panel nobody acts on still costs the scroll that
+ * hides the panel below it. The tasks panel is gone because the banner and the three tiles now say
+ * everything it said, and saying it twice on one screen teaches people to skim both.
  *
- * The rest follows the same three weights and sectioning as the admin layout; see the note on
- * `AdminDashboardComponent` for why the page is banded rather than gridded.
+ * The admin layout keeps all of it; see `AdminDashboardComponent`.
  */
 @Component({
   selector: 'pb-manager-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
-    CardComponent,
-    ChartComponent,
-    EmptyStateComponent,
-    ActivityFeedComponent,
     DashboardSectionComponent,
-    HeroMetricComponent,
-    MetricStripComponent,
     MetricTileComponent,
     LowStockPanelComponent,
-    TasksPanelComponent,
     IconComponent,
     ...MATERIAL_CORE_IMPORTS,
   ],
   template: `
     <div class="flex flex-col gap-pb-7">
       <!--
-        ============================== HERO KPI ==============================
-        The manager's headline is a workload, not money — see the note on the class.
+        ======================== THE RECORD THEY OWE ========================
+        First on the page, above the stock figures, and the only element here that can be absent.
+
+        Placed at the very top because it is the one thing on this screen that gets *worse* while it
+        is ignored: stock that is low stays low and is still there to see tomorrow, but nobody
+        remembers what the cart used two days ago. It is a prompt to act, and a prompt below three
+        tiles is a prompt people scroll past.
       -->
-      <div class="grid gap-pb-4 lg:grid-cols-5">
-        <pb-hero-metric
-          class="lg:col-span-2"
-          label="To do today"
-          [value]="data().tasks.length"
-          [caption]="taskSummary()"
-          icon="tasks"
-        />
-
-        <div class="grid gap-pb-4 sm:grid-cols-2 lg:col-span-3">
-          <pb-metric-tile
-            label="Needs restocking"
-            [value]="data().lowStock.needsRestocking"
-            [caption]="outOfStockLabel()"
-            icon="lowStock"
-            [tone]="restockTone()"
-          />
-          <pb-metric-tile
-            label="Pending requests"
-            [value]="data().pendingRequests.total"
-            [caption]="pendingBreakdown()"
-            icon="pending"
-            [tone]="pendingTone()"
-          />
-        </div>
-      </div>
-
-      <!--
-        ========================== BUSINESS HEALTH ==========================
-        The same band as the admin layout, with the two signals this role can act on. Filled cards
-        for the same reason: here the colour is the content.
-      -->
-      <pb-dashboard-section title="Business health" icon="health" [hint]="healthHint()">
-        <div class="grid gap-pb-4 sm:grid-cols-3">
-          <pb-metric-tile
-            filled
-            label="Out of stock"
-            [value]="data().lowStock.outOfStock"
-            [caption]="outOfStockCaption()"
-            icon="inventory"
-            [tone]="outOfStockTone()"
-          />
-          <pb-metric-tile
-            filled
-            label="Awaiting receipt"
-            [value]="data().pendingRequests.awaitingReceipt"
-            [caption]="receiptCaption()"
-            icon="transfers"
-            [tone]="receiptTone()"
-          />
-          <pb-metric-tile
-            filled
-            label="Consumption today"
-            [value]="data().todaysConsumption?.sheets ?? 0"
-            [caption]="consumptionBreakdown()"
-            icon="consumption"
-            [tone]="consumptionTone()"
-          />
-        </div>
-      </pb-dashboard-section>
-
-      <!--
-        The one thing this role is expected to do every day, made reachable from here.
-
-        Directly under the lead rather than at the foot of the page: it is a prompt to act, and a
-        prompt below three charts is a prompt nobody scrolls to.
-      -->
-      @if ((data().todaysConsumption?.sheets ?? 0) === 0) {
+      @if (consumptionPrompt(); as prompt) {
         <div
-          class="flex flex-col items-start gap-pb-3 rounded-pb-lg border p-pb-4 pb-tone-info sm:flex-row sm:items-center"
+          class="flex flex-col items-start gap-pb-3 rounded-pb-lg border p-pb-4 sm:flex-row sm:items-center"
+          [class]="prompt.tone === 'warning' ? 'pb-tone-warning' : 'pb-tone-info'"
         >
-          <pb-icon name="edit" [size]="18" />
-          <span class="flex-1 text-pb-body">No consumption recorded for today yet.</span>
+          <pb-icon name="consumption" [size]="18" />
+          <span class="flex-1 text-pb-body">{{ prompt.message }}</span>
           <a matButton="filled" [routerLink]="['/consumption']">
             <pb-icon name="add" [size]="16" class="mr-pb-1" />
-            Record consumption
+            {{ prompt.action }}
           </a>
         </div>
       }
 
-      <!-- ======================== TASKS AND ACTIVITY ======================== -->
-      <div class="grid gap-pb-7 lg:grid-cols-2">
-        <pb-dashboard-section
-          title="Tasks"
-          icon="tasks"
-          hint="Derived from live state — a task disappears when the work is done"
-        >
-          <pb-tasks-panel [tasks]="data().tasks" />
-        </pb-dashboard-section>
-
-        <pb-dashboard-section
-          title="Recent activity"
-          icon="activity"
-          hint="The stock ledger's newest entries"
-        >
-          <pb-activity-feed [entries]="data().recentActivity" />
-        </pb-dashboard-section>
+      <!--
+        ============================ WHAT IS SHORT ============================
+        Filled tiles: in this band the colour *is* the content — a red "out of stock" is the message,
+        not decoration on it.
+      -->
+      <div class="grid gap-pb-4 sm:grid-cols-3">
+        <pb-metric-tile
+          filled
+          label="Out of stock"
+          [value]="data().lowStock.outOfStock"
+          [caption]="outOfStockCaption()"
+          icon="lowStock"
+          [tone]="outOfStockTone()"
+        />
+        <pb-metric-tile
+          filled
+          label="Needs restocking"
+          [value]="lowOnly()"
+          [caption]="restockCaption()"
+          icon="inventory"
+          [tone]="restockTone()"
+        />
+        <pb-metric-tile
+          filled
+          label="Awaiting receipt"
+          [value]="data().pendingRequests.awaitingReceipt"
+          [caption]="receiptCaption()"
+          icon="transfers"
+          [tone]="receiptTone()"
+        />
       </div>
 
-      <!-- ============================= INVENTORY ============================= -->
+      <!--
+        ============================== THE ITEMS ==============================
+        The substance of the page. The tiles above are counts of this list, so it carries no
+        summary of its own.
+      -->
       <pb-dashboard-section
-        title="Inventory"
+        title="Items to restock"
         icon="inventory"
-        hint="Movements are counted, not summed — a kilogram and a litre do not add up"
+        [hint]="restockHint()"
       >
-        <div class="flex flex-col gap-pb-4">
-          <pb-metric-strip [metrics]="inventoryMetrics()" [columns]="2" />
-
-          <div class="grid gap-pb-4 lg:grid-cols-3">
-            <pb-card
-              dense
-              class="lg:col-span-2"
-              title="Consumption and movement"
-              [subtitle]="'Movements per day over the last ' + data().windowDays + ' days'"
-            >
-              <pb-chart [spec]="movementChart()" />
-            </pb-card>
-
-            <pb-card
-              dense
-              title="Restocking by category"
-              subtitle="Items at or below their reorder level"
-            >
-              @if (lowStockChart(); as spec) {
-                <pb-chart [spec]="spec" />
-              } @else {
-                <pb-empty-state
-                  iconName="ok"
-                  title="Everything is stocked"
-                  message="No category has an item at or below its reorder level."
-                />
-              }
-            </pb-card>
-          </div>
-
-          <pb-low-stock-panel [items]="data().lowStock.items" />
-        </div>
+        <pb-low-stock-panel [items]="data().lowStock.items" />
       </pb-dashboard-section>
     </div>
   `,
@@ -204,17 +120,78 @@ import { shortDate, type Dashboard } from '../../models/dashboard.model';
 export class ManagerDashboardComponent {
   readonly data = input.required<Dashboard>();
 
-  /** Names the band's worst state. Nothing here is computed that the page did not already show. */
-  protected readonly healthHint = computed(() => {
-    if (this.data().lowStock.outOfStock > 0) {
-      return 'Something is out of stock';
-    }
-    if ((this.data().todaysConsumption?.sheets ?? 0) === 0) {
-      return 'Consumption not recorded yet';
+  /**
+   * What the banner says, chosen by *which* day is missing rather than by how many.
+   *
+   * Three cases, in descending urgency:
+   *
+   * 1. **Yesterday has no sheet.** The prompt names it, because "yesterday" is a day the reader can
+   *    still reconstruct from memory and is the one they are most likely to have simply forgotten
+   *    on their way out. Any older gaps are appended as a count — they matter, but they are not
+   *    what today's action is.
+   * 2. **Only older days are missing.** Worth showing and not worth the same words: naming a date
+   *    three weeks back as though it were this morning's chore overstates what can still be done
+   *    about it honestly.
+   * 3. **Only today.** An `info` nudge, not a warning. The sheet is written up as the day is
+   *    worked, so an empty one at 11am is normal and flagging it amber would train the reader to
+   *    ignore the banner on the days it is amber for a real reason.
+   *
+   * Returns `null` when nothing is outstanding, so the banner disappears entirely rather than
+   * congratulating anyone. A dashboard element that is always present is one nobody reads.
+   */
+  protected readonly consumptionPrompt = computed<ConsumptionPrompt | null>(() => {
+    const missed = this.data().unrecordedConsumptionDays ?? [];
+    // Newest first from the API, so the head is the most recent gap.
+    const newest = missed[0];
+    const yesterday = previousDay(this.data().forDate);
+    const older = missed.length - 1;
+
+    if (newest === yesterday) {
+      return {
+        tone: 'warning',
+        message:
+          older === 0
+            ? "Yesterday's consumption has not been recorded. Please add it."
+            : `Yesterday's consumption has not been recorded, and ${String(older)} earlier ${
+                older === 1 ? 'day is' : 'days are'
+              } also missing.`,
+        action: "Add yesterday's",
+      };
     }
 
-    return 'Nothing needs attention';
+    if (newest !== undefined) {
+      return {
+        tone: 'warning',
+        message:
+          missed.length === 1
+            ? `Consumption was never recorded for ${shortDate(newest)}.`
+            : `Consumption is missing for ${String(missed.length)} days, the most recent being ${shortDate(newest)}.`,
+        action: 'Record consumption',
+      };
+    }
+
+    if ((this.data().todaysConsumption?.sheets ?? 0) === 0) {
+      return {
+        tone: 'info',
+        message: 'No consumption recorded for today yet.',
+        action: 'Record consumption',
+      };
+    }
+
+    return null;
   });
+
+  /**
+   * Items below their reorder level but not yet at zero.
+   *
+   * The API's `needsRestocking` counts everything short, out-of-stock included. Showing both
+   * figures unmodified would put the same item in two tiles and make them appear to sum to more
+   * than the list beneath them — so the zero ones are subtracted out and this tile means "low, but
+   * you can still sell it".
+   */
+  protected readonly lowOnly = computed(() =>
+    Math.max(0, this.data().lowStock.needsRestocking - this.data().lowStock.outOfStock),
+  );
 
   protected readonly outOfStockTone = computed<'success' | 'danger'>(() =>
     this.data().lowStock.outOfStock > 0 ? 'danger' : 'success',
@@ -224,111 +201,34 @@ export class ManagerDashboardComponent {
     this.data().lowStock.outOfStock === 0 ? 'every item has stock' : 'cannot be sold today',
   );
 
+  protected readonly restockTone = computed<'neutral' | 'warning'>(() =>
+    this.lowOnly() > 0 ? 'warning' : 'neutral',
+  );
+
+  protected readonly restockCaption = computed(() =>
+    this.lowOnly() === 0 ? 'nothing running low' : 'at or below reorder level',
+  );
+
   protected readonly receiptTone = computed<'neutral' | 'info'>(() =>
     this.data().pendingRequests.awaitingReceipt > 0 ? 'info' : 'neutral',
   );
 
-  protected readonly receiptCaption = computed(() => {
-    const waiting = this.data().pendingRequests.awaitingReceipt;
-    return waiting === 0 ? 'nothing in transit' : 'transfers to receive';
-  });
-
-  /**
-   * Warning only when nothing has been recorded.
-   *
-   * Recording consumption is this role's daily obligation, so an empty sheet at any hour is the one
-   * thing worth flagging amber — and a recorded one is a success rather than a neutral fact.
-   */
-  protected readonly consumptionTone = computed<'success' | 'warning'>(() =>
-    (this.data().todaysConsumption?.sheets ?? 0) === 0 ? 'warning' : 'success',
+  protected readonly receiptCaption = computed(() =>
+    this.data().pendingRequests.awaitingReceipt === 0
+      ? 'nothing in transit'
+      : 'transfers to confirm',
   );
 
-  protected readonly consumptionBreakdown = computed(() => {
-    const consumption = this.data().todaysConsumption;
-
-    if (consumption === undefined) {
-      return '';
-    }
-
-    return consumption.sheets === 0
-      ? 'nothing recorded yet'
-      : `${String(consumption.items)} item${consumption.items === 1 ? '' : 's'} used`;
-  });
-
-  protected readonly pendingBreakdown = computed(() => {
-    const pending = this.data().pendingRequests;
-    return `${String(pending.awaitingReceipt)} to receive`;
-  });
-
-  protected readonly outOfStockLabel = computed(() => {
-    const out = this.data().lowStock.outOfStock;
-    return out === 0 ? 'none out of stock' : `${String(out)} out of stock`;
-  });
-
-  protected readonly taskSummary = computed(() => {
-    const critical = this.data().tasks.filter((task) => task.severity === 'critical').length;
-    return critical === 0 ? 'nothing urgent' : `${String(critical)} urgent`;
-  });
-
-  protected readonly inventoryMetrics = computed<readonly StripMetric[]>(() => [
-    {
-      label: 'Consumption today',
-      value: this.data().todaysConsumption?.sheets ?? 0,
-      caption: this.consumptionBreakdown(),
-      icon: 'consumption',
-    },
-    {
-      label: 'Out of stock',
-      value: this.data().lowStock.outOfStock,
-      caption: this.data().lowStock.outOfStock === 0 ? 'nothing at zero' : 'cannot be sold today',
-      icon: 'lowStock',
-      tone: this.data().lowStock.outOfStock > 0 ? 'danger' : 'neutral',
-    },
-  ]);
-
-  /** Same rule as the admin layout: zero is the only state that is not news. */
-  protected readonly restockTone = computed<'neutral' | 'warning' | 'danger'>(() => {
+  /** Names the list's state, so the section header is useful when the list is empty. */
+  protected readonly restockHint = computed(() => {
     const stock = this.data().lowStock;
 
-    if (stock.outOfStock > 0) {
-      return 'danger';
+    if (stock.needsRestocking === 0) {
+      return 'Everything is above its reorder level';
     }
 
-    return stock.needsRestocking > 0 ? 'warning' : 'neutral';
-  });
-
-  protected readonly pendingTone = computed<'neutral' | 'warning'>(() =>
-    this.data().pendingRequests.awaitingReceipt > 0 ? 'warning' : 'neutral',
-  );
-
-  protected readonly movementChart = computed<ChartSpec>(() => {
-    const points = this.data().charts.stockMovement;
-
-    return {
-      type: 'area',
-      height: 300,
-      labels: points.map((point) => shortDate(point.date)),
-      series: [
-        { name: 'Consumed', data: points.map((point) => point.consumed) },
-        { name: 'Received', data: points.map((point) => point.purchased) },
-        { name: 'Transferred', data: points.map((point) => point.transferred) },
-      ],
-    };
-  });
-
-  protected readonly lowStockChart = computed<ChartSpec | null>(() => {
-    const slices = this.data().charts.lowStockByCategory;
-
-    if (slices.length === 0) {
-      return null;
-    }
-
-    return {
-      type: 'bar',
-      horizontal: true,
-      height: 300,
-      labels: slices.map((slice) => slice.label),
-      series: [{ name: 'Items', data: slices.map((slice) => slice.value) }],
-    };
+    return stock.outOfStock > 0
+      ? `${String(stock.outOfStock)} at zero, ${String(this.lowOnly())} running low`
+      : 'At or below their reorder level';
   });
 }

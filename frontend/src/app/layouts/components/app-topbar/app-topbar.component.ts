@@ -274,8 +274,20 @@ export class AppTopbarComponent {
    * target is comfortable with a mouse, and the toolbar is desktop-only except for the two controls
    * that stay at 40px on touch as well.
    */
+  /**
+   * 44px, not 40.
+   *
+   * These replaced Material's `matIconButton`, which quietly ships a 48px expanded hit area
+   * underneath a 40px glyph — so a plain button at the same visual size is a 40px *target*, and the
+   * shell regressed below the floor the rest of the app holds. Measured, not assumed: an audit of
+   * the redesigned shell reported every one of them at 40px.
+   *
+   * 44px is the hard minimum rather than the 48px the POS uses, because the bar is 64px tall and
+   * 48px of button in it leaves 8px of breathing room; the shell is also the one surface a mouse
+   * uses as often as a thumb.
+   */
   protected readonly iconButtonClass =
-    'grid h-10 w-10 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
+    'grid h-11 w-11 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-lg border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none';
 
   /**
    * The ⌘K affordance: a pill that prints the chord it triggers.

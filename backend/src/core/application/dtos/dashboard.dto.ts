@@ -226,6 +226,19 @@ export interface DashboardDto {
     readonly lines: number;
     readonly items: number;
   };
+
+  /**
+   * Past days in the window with no consumption sheet. Newest first, today excluded.
+   *
+   * Sent to both roles, unlike the rest of this section — an admin covering the cart on a quiet
+   * day has the same obligation, and the figure discloses nothing financial.
+   *
+   * This drives the banner at the top of the dashboard. Kept as the list of dates rather than
+   * reduced to a count on the server, because the client's message depends on *which* days are
+   * missing: yesterday reads as "please add yesterday's consumption", while a gap three weeks
+   * back is a different and much weaker prompt. A count could not tell them apart.
+   */
+  readonly unrecordedConsumptionDays?: readonly string[];
 }
 
 export interface GetDashboardInput {

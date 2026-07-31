@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { BreadcrumbService } from '../../../core/services/breadcrumb.service';
-import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
+import { IconComponent } from '../icon/icon.component';
 
 /**
  * Breadcrumb trail for the current route.
@@ -17,7 +17,7 @@ import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
 @Component({
   selector: 'pb-breadcrumbs',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, ...MATERIAL_CORE_IMPORTS],
+  imports: [RouterLink, IconComponent],
   template: `
     @let trail = crumbs();
 
@@ -39,17 +39,12 @@ import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
                 <!-- Lightened relative to the labels either side of it. A separator at the same
                      weight as the text competes with the words it is separating, which is what
                      makes a long trail read as one run-on string. -->
-                <mat-icon class="!h-4 !w-4 shrink-0 !text-[14px] text-outline" aria-hidden="true">
-                  chevron_right
-                </mat-icon>
+                <pb-icon name="chevronRight" [size]="14" class="shrink-0 text-pb-text-muted" />
               }
 
               @if (crumb.url === null) {
                 <!-- Current page: text, not a link, and marked as current. -->
-                <span
-                  class="truncate text-pb-caption font-medium text-on-surface"
-                  aria-current="page"
-                >
+                <span class="truncate text-pb-caption font-medium text-pb-text" aria-current="page">
                   {{ crumb.label }}
                 </span>
               } @else {
@@ -94,7 +89,7 @@ export class BreadcrumbsComponent {
    */
   protected readonly linkClass = computed(() => {
     const base =
-      'inline-flex items-center truncate text-pb-caption text-on-surface-variant no-underline transition-colors duration-pb-fast ease-pb-out hover:text-primary';
+      'inline-flex items-center truncate text-pb-caption text-pb-text-secondary no-underline transition-colors duration-pb-fast ease-pb-out hover:text-pb-interactive';
     return this.dense() ? base : `${base} min-h-11`;
   });
 

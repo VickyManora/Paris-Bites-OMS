@@ -1,9 +1,15 @@
 import {
+  checkTenders,
   computeTotals,
   effectiveDiscountPercent,
   priceLines,
   type SalesOrder,
 } from '../../../domain/entities/sales-order.entity.js';
+import {
+  applyCombos,
+  resolveComboOffers,
+  toComboCandidates,
+} from '../../../domain/entities/combo-pricing.js';
 import {
   DiscountType,
   OrderStatus,
@@ -11,6 +17,7 @@ import {
   type PaymentMethod,
 } from '../../../domain/enums/pos.enum.js';
 import { Permission } from '../../../domain/enums/permission.enum.js';
+import { Money, MONEY_DECIMAL_PLACES } from '../../../domain/value-objects/money.js';
 import { SalesChannel } from '../../../domain/enums/sales.enum.js';
 import {
   BusinessRuleError,
@@ -42,6 +49,13 @@ const MAX_LINE_QUANTITY = 99;
 /** Most distinct products on one order. A cart of a dessert stall does not exceed this. */
 const MAX_LINES = 40;
 
+export interface PlaceOrderPaymentInput {
+  readonly method: PaymentMethod;
+  /** In rupees. Validated against the server's total — see the note on `payments`. */
+  readonly amount: number;
+  readonly reference?: string | undefined;
+}
+
 export interface PlaceOrderLineInput {
   readonly productId: string;
   readonly quantity: number;
@@ -61,10 +75,28 @@ export interface PlaceOrderInput extends RequestContext {
    *
    * Optional so the counter can also total an order and leave it awaiting payment while the
    * customer finds their wallet.
+   *
+   * @deprecated Send `payments` instead. Kept so a client that predates split payment keeps
+   *   working: a single method with no amount means "all of it, this way", which is exactly what
+   *   this used to mean. Remove once no caller sends it.
    */
   readonly payment?:
     | { readonly method: PaymentMethod; readonly reference?: string | undefined }
     | undefined;
+
+  /**
+   * The tenders the customer paid with, one entry per method.
+   *
+   * **The amounts are checked, not trusted.** They must sum to the server's own grand total to the
+   * paisa, or the order is rejected — a client that could name its own amounts could record ₹200 of
+   * payments against a ₹447 bill and settle it, which is a hole in the day's takings rather than a
+   * validation nicety.
+   *
+   * One entry is the ordinary path and gets no special handling: paying by cash alone is a split of
+   * one. Methods must be distinct — two cash rows on one order describe nothing the counter can
+   * mean, and they make the per-method totals in reporting ambiguous.
+   */
+  readonly payments?: readonly PlaceOrderPaymentInput[] | undefined;
   /**
    * Per-attempt key from the client, held across its retries.
    *
@@ -167,7 +199,28 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
       }),
     );
 
-    const totals = computeTotals(priced, input.discountType, input.discountValue);
+    /*
+     * The "any 2" offers, applied automatically.
+     *
+     * Server-side and unconditional: the cart previews the same arithmetic so the cashier can see
+     * it coming, but the price charged is computed here from the product rows. A combo the client
+     * asked for would be a client-supplied price by another name.
+     *
+     * Nothing is required of the counter. That is the point of the change — Sunil rings up the two
+     * bowls the customer actually chose, the offer applies itself, and the order records the
+     * flavours instead of an anonymous "Any 2 Signature Bowls" line.
+     */
+    const combos = applyCombos(
+      toComboCandidates(priced, (productId) => byId.get(productId)?.categoryId),
+      resolveComboOffers(resolved),
+    );
+
+    const totals = computeTotals(
+      priced,
+      input.discountType,
+      input.discountValue,
+      combos.discount,
+    );
     const reason = input.discountReason?.trim();
 
     if (totals.discountAmount > 0) {
@@ -178,7 +231,19 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
         });
       }
 
-      const percent = effectiveDiscountPercent(totals.subtotal, totals.discountAmount);
+      /*
+       * The ceiling is measured against what remains **after** the combo, not against the raw
+       * subtotal.
+       *
+       * A 2×Blueberry pair is already 16.5% off. Measured against the subtotal, that offer would
+       * eat most of a Store Manager's 20% headroom and a small goodwill discount on top would be
+       * refused — the shop's own promotion would be spending the manager's authority. The ceiling
+       * exists to bound what *staff* give away, so it is applied to exactly that.
+       */
+      const percent = effectiveDiscountPercent(
+        Money.round(totals.subtotal - totals.comboDiscount),
+        totals.discountAmount,
+      );
 
       if (
         percent > STORE_MANAGER_MAX_DISCOUNT_PERCENT &&
@@ -190,10 +255,14 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
       }
     }
 
+    const payments = this.resolvePayments(input, totals.grandTotal);
+
     const order = await this.orders.create({
       channel: SalesChannel.WALK_IN,
       status: OrderStatus.PENDING_PAYMENT,
       subtotal: totals.subtotal,
+      comboDiscountAmount: totals.comboDiscount,
+      comboCount: combos.matches.length,
       discountType: input.discountType,
       discountValue: input.discountType === DiscountType.NONE ? 0 : input.discountValue,
       discountAmount: totals.discountAmount,
@@ -207,15 +276,7 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
         input.customer === undefined
           ? undefined
           : { name: input.customer.name, phone: input.customer.phone },
-      payment:
-        input.payment === undefined
-          ? undefined
-          : {
-              method: input.payment.method,
-              // The server's total, not a client-supplied amount.
-              amount: totals.grandTotal,
-              reference: input.payment.reference?.trim(),
-            },
+      payments,
     });
 
     await this.auditLog.record({
@@ -228,9 +289,18 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
         orderNumber: order.orderNumber,
         itemCount: order.itemCount,
         subtotal: totals.subtotal,
+        // Named in the trail so "why is this order cheaper than its lines" is answerable later
+        // without re-deriving the offer from the prices.
+        comboDiscount: totals.comboDiscount,
+        combos: combos.matches.map((match) => `${match.label}: ${match.products.join(' + ')}`),
         discountAmount: totals.discountAmount,
         grandTotal: totals.grandTotal,
-        paid: input.payment !== undefined,
+        paid: payments.length > 0,
+        // Recorded per method, because "₹447 taken" and "₹200 cash plus ₹247 UPI" are different
+        // facts about the same order and only the second one reconciles against a till.
+        ...(payments.length > 0
+          ? { payments: payments.map((p) => ({ method: p.method, amount: p.amount })) }
+          : {}),
         ...(totals.discountAmount > 0 ? { discountReason: reason } : {}),
       },
     });
@@ -239,11 +309,95 @@ export class PlaceOrderUseCase implements IUseCase<PlaceOrderInput, OrderDto> {
       orderId: order.id,
       orderNumber: order.orderNumber,
       grandTotal: totals.grandTotal,
-      paid: input.payment !== undefined,
+      paid: payments.length > 0,
+      tenders: payments.length,
       actorId: input.actorId,
     });
 
     return PosMapper.toOrderDto(order);
+  }
+
+  /**
+   * Turns whatever the caller sent into the rows to write, and refuses anything that does not add up.
+   *
+   * Three shapes arrive here and all three are legitimate:
+   *
+   * - **Nothing** — the order is totalled and left awaiting payment.
+   * - **`payment`** — the legacy single method. The amount is the whole total, which is what that
+   *   field always meant; the client never sent one and still does not.
+   * - **`payments`** — one entry per tender, with amounts.
+   *
+   * ## Why the amounts are checked rather than trusted
+   *
+   * They are the only figures in this request the client is allowed to name. Prices come from the
+   * product rows and the total is computed here, precisely so a browser cannot assert what an order
+   * is worth — and a split would hand that back if the parts were taken on faith. A request pairing
+   * a ₹447 order with ₹200 of payments would otherwise mark it PAID and quietly short the day's
+   * takings by ₹247.
+   *
+   * ## Why the comparison is in paise
+   *
+   * `0.1 + 0.2 !== 0.3`. Comparing rupee floats would reject a legitimate 200 + 247 on some inputs
+   * and accept a one-paisa short payment on others. `Money.sum` adds as integer minor units, and the
+   * equality below is between two values already rounded to the stored scale.
+   */
+  private resolvePayments(
+    input: PlaceOrderInput,
+    grandTotal: number,
+  ): readonly { method: PaymentMethod; amount: number; reference: string | undefined }[] {
+    const explicit = input.payments;
+
+    if (explicit === undefined || explicit.length === 0) {
+      // The legacy single-method field: all of it, that way.
+      return input.payment === undefined
+        ? []
+        : [
+            {
+              method: input.payment.method,
+              amount: grandTotal,
+              reference: input.payment.reference?.trim(),
+            },
+          ];
+    }
+
+    const problem = checkTenders(explicit, grandTotal);
+
+    if (problem === 'DUPLICATE_METHOD') {
+      throw new BusinessRuleError(
+        'Each payment method may appear once. Combine the amounts for a method into a single entry.',
+        { payments: ['Duplicate payment method.'] },
+      );
+    }
+
+    if (problem === 'NON_POSITIVE_AMOUNT') {
+      throw new BusinessRuleError('Every payment must be more than zero.', {
+        payments: ['A payment amount must be greater than zero.'],
+      });
+    }
+
+    if (problem === 'DOES_NOT_MATCH_TOTAL') {
+      /*
+       * The message names both figures deliberately.
+       *
+       * This is the error a cashier sees if the client's arithmetic and the server's ever diverge —
+       * a stale price, a discount applied after the split was keyed — and "payments do not match the
+       * total" without the numbers leaves them nothing to act on.
+       */
+      const tendered = Money.sum(explicit.map((payment) => payment.amount));
+
+      throw new BusinessRuleError(
+        `The payments add up to ₹${tendered.toFixed(MONEY_DECIMAL_PLACES)} but the order is ₹${grandTotal.toFixed(MONEY_DECIMAL_PLACES)}. They must match exactly.`,
+        { payments: ['Payments must add up to the order total.'] },
+      );
+    }
+
+    return explicit.map((payment) => ({
+      method: payment.method,
+      // Rounded to the stored scale rather than passed through: a client sending 148.333 must not
+      // become a Decimal(12,2) the database silently truncates.
+      amount: Money.round(payment.amount),
+      reference: payment.reference?.trim(),
+    }));
   }
 
   /**

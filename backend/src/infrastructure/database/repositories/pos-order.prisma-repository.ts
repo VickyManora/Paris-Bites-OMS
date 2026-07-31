@@ -91,7 +91,8 @@ export class PosOrderPrismaRepository implements IPosOrderRepository {
       const orderNumber = await this.nextOrderNumber(tx, now);
       const customerId = await this.resolveCustomer(tx, data.customer);
 
-      const paid = data.payment !== undefined;
+      // Paid when *any* tender came with the order. One or three, the rule is the same.
+      const paid = data.payments.length > 0;
 
       const order = await tx.salesOrder.create({
         data: {
@@ -107,24 +108,29 @@ export class PosOrderPrismaRepository implements IPosOrderRepository {
           discountValue: data.discountValue,
           discountAmount: data.discountAmount,
           discountReason: data.discountReason ?? null,
+          comboDiscountAmount: data.comboDiscountAmount,
+          comboCount: data.comboCount,
           grandTotal: data.grandTotal,
           notes: data.notes ?? null,
           placedById: data.placedById,
           idempotencyKey: data.idempotencyKey ?? null,
           paidAt: paid ? now : null,
           items: { create: data.lines.map((line) => ({ ...line })) },
-          ...(data.payment === undefined
-            ? {}
-            : {
+          // One row per tender. Prisma's nested create takes an array, so a split costs no extra
+          // round trip and lands inside the same transaction as the order and its lines — a
+          // half-written split would be an order whose payments do not sum to its total.
+          ...(paid
+            ? {
                 payments: {
-                  create: {
-                    method: data.payment.method,
-                    amount: data.payment.amount,
-                    reference: data.payment.reference ?? null,
+                  create: data.payments.map((payment) => ({
+                    method: payment.method,
+                    amount: payment.amount,
+                    reference: payment.reference ?? null,
                     confirmedById: data.placedById,
-                  },
+                  })),
                 },
-              }),
+              }
+            : {}),
         },
         include: ORDER_INCLUDE,
       });

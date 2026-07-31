@@ -15,6 +15,9 @@ export interface ProductRow {
   readonly imageUrl: string | null;
   readonly isAvailable: boolean;
   readonly displayOrder: number;
+  /** The tier a product belongs to. What the "any 2" combo rule pairs within. */
+  readonly categoryId: string;
+  readonly categoryName: string;
 }
 
 export interface ProductCategoryRow {
@@ -66,6 +69,9 @@ export interface CreateOrderData {
   readonly discountValue: number;
   readonly discountAmount: number;
   readonly discountReason: string | undefined;
+  /** What the automatic "any 2" offers took off, and how many pairs matched. */
+  readonly comboDiscountAmount: number;
+  readonly comboCount: number;
   readonly grandTotal: number;
   readonly notes: string | undefined;
   readonly placedById: string;
@@ -77,10 +83,26 @@ export interface CreateOrderData {
   readonly lines: readonly CreateOrderLineData[];
   /** Absent for a guest. Matched on phone when given, so a regular is one row. */
   readonly customer: { readonly name: string | undefined; readonly phone: string | undefined } | undefined;
-  /** Present when the order is paid in the same call — the common one-click path. */
-  readonly payment:
-    | { readonly method: PaymentMethod; readonly amount: number; readonly reference: string | undefined }
-    | undefined;
+  /**
+   * The tenders the order is paid with, when it is paid in the same call.
+   *
+   * **A list, because a customer can pay with more than one thing.** ₹200 in cash and ₹247 by UPI
+   * against a ₹447 bill is two rows, not one row of ₹447 attributed to whichever method the cashier
+   * picked last — which is what a single payment forced, and what made the day's cash figure wrong
+   * by however much of it arrived digitally.
+   *
+   * Empty or absent means the order is awaiting payment. One entry is the common path and is not a
+   * special case: it is a split of one.
+   *
+   * The amounts are the *server's*, apportioned from its own total — see `PlaceOrderUseCase`.
+   */
+  readonly payments: readonly CreateOrderPaymentData[];
+}
+
+export interface CreateOrderPaymentData {
+  readonly method: PaymentMethod;
+  readonly amount: number;
+  readonly reference: string | undefined;
 }
 
 export interface RecordPaymentData {

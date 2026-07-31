@@ -60,6 +60,62 @@ in four figures and meet a conflict on submit.
 
 ---
 
+## The till fills the form in
+
+The counter already knows what it took. Retyping it at close was duplicate data entry, and the
+dashboard's headline sales figure sat at an em dash all trading day while the POS two tiles over had
+the answer.
+
+Two places changed, both display-and-prefill only:
+
+**The dashboard hero** shows the till's revenue when the day is unrecorded, captioned
+`₹298 cash · ₹447 online at the counter`, with an amber `From the till · not yet confirmed` badge and
+a `Confirm today's takings` button. It is still an em dash when there is genuinely nothing — "no
+declared entry yet" and "no idea what today took" are different facts and only the second deserves a
+blank. It is never `₹0.00` on an unrecorded day, for the reason already given above.
+
+**The form** prefills Walk-in — cash and Walk-in — online from `GET /pos/summary?date=`, and says so
+in an info panel naming the order count and the split.
+
+### Why this is a prefill and not the answer
+
+Declared sales and POS orders are two records of the same walk-in trade, and this app **compares**
+them rather than adding them — `walkInReconciliation` on the dashboard ships the variance, and
+[ANALYTICS.md](./ANALYTICS.md) states the same for the "Through the till" tile. Writing the till's
+figure straight in would make that variance identically zero and it would stop detecting anything: an
+order rung up wrong, an order never rung up at all, a short drawer.
+
+So the fields stay editable and the panel says *"Count the drawer and correct the cash figure if it
+differs."* The cash count stays a real count; only the typing is gone. Note the asymmetry that makes
+this safe — a drawer **can** be counted independently, whereas the UPI total simply *is* whatever the
+QR recorded, so there was never anything to cross-check on that half.
+
+### Three guards worth keeping
+
+**Scope.** `/pos/summary` answers within the caller's permission: a manager sees only their own
+orders and the payload says `scope: 'own'`. Prefilling from that would seed a whole day's declared
+takings with one operator's shift while looking authoritative — a silent under-report, worse than an
+empty field. Only `all` is offered.
+
+**Empty fields only.** By the time the request resolves the user may already have typed. Overwriting
+what somebody entered is never the friendlier behaviour.
+
+**Never when correcting.** Switching the dialog to an existing day drops the offer entirely.
+Overwriting stored figures with the till's would destroy the independent count that is the point of
+storing them, and a prefill hint pointing at fields the user did not fill would misdescribe where
+those numbers came from.
+
+A failed request is swallowed. This is a convenience on top of a form that worked without it; an
+error banner about the till would be noise on a screen whose job is entering a figure the user is
+holding in their hand.
+
+### What the till figure is not
+
+It excludes aggregators by definition, so on a Zomato day the provisional dashboard number is
+genuinely lower than the day's real total. Saying "from the till" on the badge is what keeps that
+honest rather than merely decorative.
+
+
 ## Corrections
 
 A day's takings gets corrected — a card machine total read wrong, an aggregator payout
@@ -69,11 +125,42 @@ reconciled days later. Every correction:
 - bumps the revision number,
 - appends a `DailySalesEntryRevision` row holding the new lines, the new total **and the
   previous total**,
-- **requires a reason**, which is stored and shown.
+- **requires a reason** when it is genuinely a correction — see below.
 
 The reason is not optional politeness. Revenue is the number the business is judged on, and
 one that changed with no explanation attached is worse than one never corrected — the trail
 exists so a later reader can tell a reconciliation from a mistake.
+
+### Completing a day is not correcting one
+
+A reason used to be demanded for *every* edit, and that was wrong about how the shop works. The
+counter total goes in at close; Zomato is added later, once the platform settles. Filling a bucket
+that held nothing states something new and contradicts nothing, so asking "why is this changing?"
+for the second half of a normal evening only teaches people to type a character to get past the
+prompt — which costs the trail more than it gains.
+
+`UpdateDailySalesUseCase.classifyChange` sorts an edit into three cases by comparing the submitted
+buckets against the stored ones:
+
+| Kind | What happened | Reason |
+|---|---|---|
+| `completing` | every change fills a bucket that held nothing | not required; the revision note is auto-written as e.g. `Added Zomato` |
+| `correcting` | a bucket that held a figure now holds a different one | **required** |
+| `unchanged` | amounts identical, only notes moved | not required; note reads `Notes updated` |
+
+Two things are easy to get wrong here and are settled deliberately:
+
+**A reduction is a correction, including to zero.** "Zomato was 1,240 and is now nothing" is a claim
+about a figure somebody already committed to. The classifier walks the *union* of the stored and
+submitted buckets, because the form submits a cleared bucket by omitting it — comparing only the
+submitted lines would miss the single most important case.
+
+**A revision always carries a note**, even when the user was not asked for one. A blank entry
+against a changed total is what makes a later reader distrust the whole history.
+
+The schema no longer pretends to enforce this: `reason` is optional in `updateDailySalesSchema` and
+required by the use case, because only the use case can see the previous amounts. The client applies
+the same rule to show and hide the field as the user types, and the server stays the authority.
 
 Editing is deliberately not gated behind a higher permission than recording. A figure fixed
 the same evening is ordinary work, and putting it out of reach would only mean the wrong

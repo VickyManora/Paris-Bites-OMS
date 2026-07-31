@@ -31,3 +31,12 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Screenshots dropped into the repo while working.
+#
+# macOS saves these to the working directory by default, and they are 1–2 MB each. Nothing here
+# ignores loose images, so a `git add .` commits them permanently into history — where they cannot
+# be removed without a rewrite. The product photo masters under design-assets/ are deliberate and
+# unaffected.
+/Screenshot*.png
+/Screen Shot*.png

@@ -99,7 +99,15 @@ export interface PosSummaryInput {
   readonly permissions: readonly Permission[];
 }
 
-/** The POS home figures, scoped the same way the list is. */
+/**
+ * The POS home figures, scoped the same way the list is.
+ *
+ * **Two independent permissions, answering two different questions.** `POS_ORDER_READ_ALL` decides
+ * *whose* orders are counted — everyone's, or only the caller's. `POS_TAKINGS_READ` decides whether
+ * the money totals are returned at all. A Store Manager holds neither, so they get the counts and
+ * what is still owed for their own day and no takings; conflating the two would mean the day a
+ * manager is trusted to see the whole cart's orders they would silently start seeing its revenue.
+ */
 export class GetPosSummaryUseCase implements IUseCase<PosSummaryInput, PosDaySummaryDto> {
   constructor(private readonly orders: IPosOrderRepository) {}
 
@@ -107,6 +115,10 @@ export class GetPosSummaryUseCase implements IUseCase<PosSummaryInput, PosDaySum
     const readAll = input.permissions.includes(Permission.POS_ORDER_READ_ALL);
     const summary = await this.orders.summaryFor(input.day, readAll ? undefined : input.actorId);
 
-    return PosMapper.toSummaryDto(summary, readAll ? 'all' : 'own');
+    return PosMapper.toSummaryDto(
+      summary,
+      readAll ? 'all' : 'own',
+      input.permissions.includes(Permission.POS_TAKINGS_READ),
+    );
   }
 }

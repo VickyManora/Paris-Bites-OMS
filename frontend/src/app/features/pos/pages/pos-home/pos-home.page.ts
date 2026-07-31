@@ -83,16 +83,25 @@ import type { PbIconName } from '../../../../shared/components/icon/icon-registr
           <pb-spinner size="lg" label="Loading today’s figures…" />
         </div>
       } @else if (summary(); as day) {
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div [class]="tileClass">
-            <span class="text-pb-caption text-on-surface-variant">Today's revenue</span>
-            <span class="text-pb-heading font-bold tabular-nums text-pos-brown">
-              {{ fmt(day.revenue) }}
-            </span>
-            <span class="text-pb-caption text-on-surface-variant">
-              {{ plural(day.paidCount, 'paid order') }}
-            </span>
-          </div>
+        <!--
+          Two tiles or four, depending on what the response carried.
+
+          The takings are not in a Store Manager's payload at all (see 'PosDaySummary'), so the two
+          tiles that show them are absent rather than blank — and the column count follows, because
+          four columns holding two tiles reads as a row that failed to load.
+        -->
+        <div class="grid grid-cols-2 gap-3" [class]="tileColumnsClass()">
+          @if (day.revenue !== undefined) {
+            <div [class]="tileClass">
+              <span class="text-pb-caption text-on-surface-variant">Today's revenue</span>
+              <span class="text-pb-heading font-bold tabular-nums text-pos-brown">
+                {{ fmt(day.revenue) }}
+              </span>
+              <span class="text-pb-caption text-on-surface-variant">
+                {{ plural(day.paidCount, 'paid order') }}
+              </span>
+            </div>
+          }
 
           <div [class]="tileClass">
             <span class="text-pb-caption text-on-surface-variant">Orders</span>
@@ -117,16 +126,18 @@ import type { PbIconName } from '../../../../shared/components/icon/icon-registr
             </span>
           </div>
 
-          <div [class]="tileClass">
-            <span class="text-pb-caption text-on-surface-variant">Average order</span>
-            <span class="text-pb-heading font-bold tabular-nums text-pos-brown">
-              {{ day.averageOrderValue === null ? '—' : fmt(day.averageOrderValue) }}
-            </span>
-            <span class="text-pb-caption text-on-surface-variant">
-              <!-- Cash versus digital is what gets counted at close, so it is on the tile. -->
-              {{ fmt(day.byPaymentMethod.CASH) }} cash
-            </span>
-          </div>
+          @if (day.averageOrderValue !== undefined) {
+            <div [class]="tileClass">
+              <span class="text-pb-caption text-on-surface-variant">Average order</span>
+              <span class="text-pb-heading font-bold tabular-nums text-pos-brown">
+                {{ day.averageOrderValue === null ? '—' : fmt(day.averageOrderValue) }}
+              </span>
+              <span class="text-pb-caption text-on-surface-variant">
+                <!-- Cash versus digital is what gets counted at close, so it is on the tile. -->
+                {{ fmt(day.byPaymentMethod?.CASH ?? 0) }} cash
+              </span>
+            </div>
+          }
         </div>
       }
 
@@ -225,6 +236,16 @@ export class PosHomePage implements OnInit {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly canSeeAll = computed(() => this.summary()?.scope === 'all');
+
+  /**
+   * Four columns when the takings are in the payload, two when they are not.
+   *
+   * Read off the response rather than off the token: the server decides what a caller is told, and a
+   * second copy of that rule in the client is a second thing to keep in step with it.
+   */
+  protected readonly tileColumnsClass = computed(() =>
+    this.summary()?.revenue === undefined ? 'lg:grid-cols-2' : 'lg:grid-cols-4',
+  );
 
   protected readonly scopeLabel = computed(() => {
     const day = this.summary();

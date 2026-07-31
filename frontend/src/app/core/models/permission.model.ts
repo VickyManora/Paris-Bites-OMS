@@ -44,12 +44,17 @@ export const Permission = {
 
   /**
    * Point of sale. `POS_OPERATE` is the counter and a Store Manager holds it; the other
-   * three are admin-only — see the backend permission enum for the reasoning.
+   * four are admin-only — see the backend permission enum for the reasoning.
+   *
+   * `POS_TAKINGS_READ` is not read by any guard here: the POS home screen renders the takings if
+   * the response carries them, because the server is what withholds the numbers. It is mirrored so
+   * this list stays a complete copy of the backend's.
    */
   POS_OPERATE: 'pos:operate',
   POS_ORDER_READ_ALL: 'pos:order-read-all',
   POS_ORDER_CANCEL: 'pos:order-cancel',
   POS_DISCOUNT_UNLIMITED: 'pos:discount-unlimited',
+  POS_TAKINGS_READ: 'pos:takings-read',
 
   /** Both admin-only: revenue is financial data, and entry is reconciled by an admin. */
   SALE_READ: 'sale:read',

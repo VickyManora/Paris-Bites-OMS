@@ -116,11 +116,26 @@ total, computed from the rows, so a split settles on the last part and not the f
 |---|---|---|
 | Take orders, receive payment | yes | yes |
 | See orders | **all, every day** | **own, today only** |
+| See the day's takings | yes | **no** |
 | Cancel an order | yes | **no** |
 | Discount above 20% | yes | no |
 
 `POS_OPERATE` is the counter, and an admin holds it too — on a bad evening they will be the
 one serving.
+
+**The day's takings are a separate permission from reading orders.** `POS_TAKINGS_READ` covers
+the three aggregate figures at the top of the POS home screen — today's revenue, the average
+order value, and the cash/digital split — and a Store Manager does not hold it, for the same
+reason `SALE_READ` is admin-only: a day's takings are financial data, and totalling them is a
+reconciliation task rather than a counter one. Their home screen therefore shows two tiles,
+Orders and Pending payment, rather than four.
+
+Nothing the cashier needs to take money is affected: an order's own total, the amount tendered
+and what is still owed all remain visible. And the figures are **omitted from the response**
+rather than hidden by the client — a number that reaches the browser has been disclosed
+whatever the template does with it. Keeping this independent of `POS_ORDER_READ_ALL` is
+deliberate: the day a manager is trusted to see the whole cart's orders should not be the day
+they silently start seeing its revenue.
 
 **Read scoping is enforced in the use case, not by a second endpoint.** One `GET /pos/orders`
 serves both roles; the restriction is applied over whatever filter arrived, so no combination
@@ -138,7 +153,7 @@ be distinguishable when the cash is counted; the status is what excludes it from
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/v1/pos/menu` | Whole menu, one request. `includeUnavailable=true` for the counter |
-| `GET` | `/api/v1/pos/summary` | Today's figures, scoped. Carries `scope: all \| own` |
+| `GET` | `/api/v1/pos/summary` | Today's figures, scoped. Carries `scope: all \| own`; `revenue`, `averageOrderValue` and `byPaymentMethod` are absent without `POS_TAKINGS_READ` |
 | `GET` | `/api/v1/pos/orders` | Paginated. `search`, `fromDate`, `toDate`, `status`, `paymentMethod`, sorting |
 | `GET` | `/api/v1/pos/orders/:id` | Full order |
 | `POST` | `/api/v1/pos/orders` | Places it, payment optional |

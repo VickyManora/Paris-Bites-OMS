@@ -94,7 +94,35 @@ export const PosMapper = {
     }));
   },
 
-  toSummaryDto(summary: PosDaySummary, scope: 'all' | 'own'): PosDaySummaryDto {
-    return { ...summary, scope };
+  /**
+   * The day's figures, carrying the takings only when the caller may see them.
+   *
+   * Spelled out field by field rather than spreading and deleting: a spread would put every future
+   * field of `PosDaySummary` on the wire by default, so the day someone adds a second money figure
+   * to the summary it would reach a Store Manager's browser without anyone deciding it should.
+   * Listing the fields makes disclosure the explicit act.
+   */
+  toSummaryDto(
+    summary: PosDaySummary,
+    scope: 'all' | 'own',
+    includeTakings: boolean,
+  ): PosDaySummaryDto {
+    return {
+      date: summary.date,
+      orderCount: summary.orderCount,
+      paidCount: summary.paidCount,
+      pendingCount: summary.pendingCount,
+      cancelledCount: summary.cancelledCount,
+      pendingAmount: summary.pendingAmount,
+      itemsSold: summary.itemsSold,
+      scope,
+      ...(includeTakings
+        ? {
+            revenue: summary.revenue,
+            averageOrderValue: summary.averageOrderValue,
+            byPaymentMethod: summary.byPaymentMethod,
+          }
+        : {}),
+    };
   },
 } as const;

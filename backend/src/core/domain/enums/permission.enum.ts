@@ -77,11 +77,18 @@ export const Permission = {
    *   quietly reverse it.
    * - `POS_DISCOUNT_UNLIMITED` — discount past the Store Manager ceiling. Held by admins;
    *   the ceiling itself lives in the use case so both roles go through one rule.
+   * - `POS_TAKINGS_READ` — the day's takings as a total: revenue, average order value, and the
+   *   cash/digital split. Admin-only, for the same reason `SALE_READ` is: a day's takings are
+   *   financial data, and totalling them is a reconciliation task rather than a counter one.
+   *   Withholding it does **not** touch the counter's own job — an order's total, the amount
+   *   tendered and what is still owed all remain visible, because a cashier cannot take payment
+   *   without them. What goes is the aggregate at the top of the POS home screen.
    */
   POS_OPERATE: 'pos:operate',
   POS_ORDER_READ_ALL: 'pos:order-read-all',
   POS_ORDER_CANCEL: 'pos:order-cancel',
   POS_DISCOUNT_UNLIMITED: 'pos:discount-unlimited',
+  POS_TAKINGS_READ: 'pos:takings-read',
 
   /**
    * Daily sales figures.
@@ -145,8 +152,9 @@ const STORE_MANAGER_PERMISSIONS: readonly Permission[] = [
   Permission.TRANSFER_CREATE,
   Permission.TRANSFER_COMPLETE,
 
-  // The counter. Deliberately without POS_ORDER_READ_ALL, POS_ORDER_CANCEL or
-  // POS_DISCOUNT_UNLIMITED: taking orders is their job, reversing them is not.
+  // The counter. Deliberately without POS_ORDER_READ_ALL, POS_ORDER_CANCEL,
+  // POS_DISCOUNT_UNLIMITED or POS_TAKINGS_READ: taking orders is their job, reversing them is
+  // not, and the day's takings as a total are financial data they have no task for.
   Permission.POS_OPERATE,
 
   Permission.SETTINGS_READ,

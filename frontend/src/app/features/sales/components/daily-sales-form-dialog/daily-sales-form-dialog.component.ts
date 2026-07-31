@@ -377,16 +377,19 @@ export class DailySalesFormDialogComponent {
 
     this.pos.summary(date).subscribe({
       next: (day) => {
-        if (day.scope !== 'all' || day.revenue <= 0) {
+        /* The split is absent unless the caller holds `POS_TAKINGS_READ` — which whoever can reach
+           this dialog does, since recording sales is admin-only. Checked rather than assumed,
+           because the two permissions are separate and this prefill is not worth coupling them. */
+        const split = day.byPaymentMethod;
+
+        if (day.scope !== 'all' || split === undefined || (day.revenue ?? 0) <= 0) {
           return;
         }
 
-        const cash = round2(day.byPaymentMethod[PaymentMethod.CASH]);
+        const cash = round2(split[PaymentMethod.CASH]);
         /* Card is folded into online because the declared buckets have no card of their own — the
            cart takes UPI against a printed QR, and a card total would have nowhere to land. */
-        const online = round2(
-          day.byPaymentMethod[PaymentMethod.UPI] + day.byPaymentMethod[PaymentMethod.CARD],
-        );
+        const online = round2(split[PaymentMethod.UPI] + split[PaymentMethod.CARD]);
 
         this.counterTakings.set({ cash, online, orders: day.paidCount });
 

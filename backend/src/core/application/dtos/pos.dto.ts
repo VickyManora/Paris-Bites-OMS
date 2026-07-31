@@ -92,11 +92,22 @@ export interface PosDaySummaryDto {
   readonly paidCount: number;
   readonly pendingCount: number;
   readonly cancelledCount: number;
-  readonly revenue: number;
   readonly pendingAmount: number;
-  readonly averageOrderValue: number | null;
-  readonly byPaymentMethod: Readonly<Record<PaymentMethod, number>>;
   readonly itemsSold: number;
+
+  /*
+   * The day's takings — **absent unless the caller holds `POS_TAKINGS_READ`.**
+   *
+   * Omitted from the response rather than sent and hidden by the client. A number that reaches
+   * the browser has been disclosed whatever the template does with it, and these three are the
+   * aggregate a Store Manager is not given: the total, the average, and the cash/digital split.
+   *
+   * `averageOrderValue` therefore has two distinct empty states, and they must not be conflated:
+   * `null` is "nothing sold yet, so there is no average", while absent is "not yours to see".
+   */
+  readonly revenue?: number;
+  readonly averageOrderValue?: number | null;
+  readonly byPaymentMethod?: Readonly<Record<PaymentMethod, number>>;
   /**
    * Whether these figures cover everyone or only the caller.
    *

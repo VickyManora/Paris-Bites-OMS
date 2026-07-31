@@ -13,6 +13,7 @@ import { firstValueFrom, map } from 'rxjs';
 import type { Sort } from '@angular/material/sort';
 import { AuthService } from '../../../../core/auth/services/auth.service';
 import { Permission } from '../../../../core/models/permission.model';
+import { Role } from '../../../../core/models/role.model';
 import { NotificationService } from '../../../../core/services/notification.service';
 import { CardComponent } from '../../../../shared/components/card/card.component';
 import { ConfirmDialogService } from '../../../../shared/components/confirm-dialog/confirm-dialog.service';
@@ -93,7 +94,7 @@ import { InventoryStore } from '../../services/inventory-store.service';
   ],
   template: `
     <div class="flex flex-col gap-6">
-      <pb-page-header title="Inventory" subtitle="Stock across the warehouse and cart">
+      <pb-page-header title="Inventory" [subtitle]="pageSubtitle()">
         <button
           slot="actions"
           matButton="outlined"
@@ -146,13 +147,17 @@ import { InventoryStore } from '../../services/inventory-store.service';
           [caption]="pageScopeCaption()"
           [loading]="store.loading()"
         />
-        <pb-stat-card
-          label="Home Warehouse"
-          [value]="countAt('HOME_WAREHOUSE')"
-          iconName="value"
-          [caption]="pageScopeCaption()"
-          [loading]="store.loading()"
-        />
+        <!-- Always zero once the list is pinned to the cart, and a zero that means "not shown"
+             rather than "none in stock" is the kind of figure that gets believed. -->
+        @if (!cartOnly()) {
+          <pb-stat-card
+            label="Home Warehouse"
+            [value]="countAt('HOME_WAREHOUSE')"
+            iconName="value"
+            [caption]="pageScopeCaption()"
+            [loading]="store.loading()"
+          />
+        }
         <pb-stat-card
           label="Cart"
           [value]="countAt('CART')"
@@ -186,18 +191,23 @@ import { InventoryStore } from '../../services/inventory-store.service';
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field slot="filters" class="lg:!w-44" subscriptSizing="dynamic">
-              <mat-label>Location</mat-label>
-              <mat-select
-                [value]="store.filters().location"
-                (valueChange)="store.setLocation($event)"
-              >
-                <mat-option [value]="null">All locations</mat-option>
-                @for (option of locationOptions; track option.value) {
-                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
+            <!-- Dropped entirely when the page is pinned to the cart: a control whose only
+                 option is the current value is furniture, and one that can be changed would
+                 undo the pin. -->
+            @if (!cartOnly()) {
+              <mat-form-field slot="filters" class="lg:!w-44" subscriptSizing="dynamic">
+                <mat-label>Location</mat-label>
+                <mat-select
+                  [value]="store.filters().location"
+                  (valueChange)="store.setLocation($event)"
+                >
+                  <mat-option [value]="null">All locations</mat-option>
+                  @for (option of locationOptions; track option.value) {
+                    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
 
             <mat-form-field slot="filters" class="lg:!w-36" subscriptSizing="dynamic">
               <mat-label>Status</mat-label>
@@ -253,7 +263,7 @@ import { InventoryStore } from '../../services/inventory-store.service';
 
         <div class="px-pb-4 pb-pb-4">
           <pb-data-table
-            [columns]="columns"
+            [columns]="columns()"
             [rows]="store.items()"
             [pagination]="store.pagination()"
             [loading]="store.loading()"
@@ -299,6 +309,27 @@ export class InventoryListPage {
   private readonly confirm = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly auth = inject(AuthService);
+
+  /**
+   * A Store Manager sees the cart and nothing else on this page.
+   *
+   * ## Why this is a page default and not enforced on the server
+   *
+   * Everywhere else in this app the rule is the opposite — a Store Manager's dashboard omits sales
+   * figures from the *payload* rather than hiding them in the template, because a number that reaches
+   * the browser has been disclosed. That rule does not apply here, and the difference is worth being
+   * explicit about: warehouse stock is not confidential to a manager. They hold `TRANSFER_CREATE`
+   * precisely so they can *request stock out of the warehouse*, and the create-transfer dialog asks
+   * this same `/inventory/items` endpoint for `location=HOME_WAREHOUSE` to populate its picker.
+   *
+   * So scoping the endpoint by role would break the manager's own replenishment workflow — they would
+   * open the transfer dialog to an empty list and have no way to ask for stock. What was asked for
+   * here is focus, not confidentiality, and focus is a default.
+   *
+   * The scope is *stated* on the page rather than applied silently, because a list that quietly
+   * omits rows is worse than one that explains itself.
+   */
+  protected readonly cartOnly = computed(() => this.auth.hasRole(Role.STORE_MANAGER));
   private readonly service = inject(InventoryService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -326,6 +357,16 @@ export class InventoryListPage {
    * Empty when the page holds everything the filter matched — there is no distinction to
    * draw then, and a permanent "on this page" would train people to stop reading it.
    */
+  /**
+   * The subtitle carries the scope, so a pinned list explains itself.
+   *
+   * The alternative — leaving "Stock across the warehouse and cart" in place while showing only the
+   * cart — would be the page stating something untrue about its own contents.
+   */
+  protected readonly pageSubtitle = computed(() =>
+    this.cartOnly() ? 'Stock at the cart' : 'Stock across the warehouse and cart',
+  );
+
   protected readonly pageScopeCaption = computed(() => {
     const loaded = this.store.items().length;
     const total = this.store.pagination().total;
@@ -355,6 +396,18 @@ export class InventoryListPage {
    * with its own clear button — a chip would be a second place to remove the same thing, and the one
    * filter whose state is already obvious.
    */
+  /**
+   * The Location column is dropped once every row is the cart.
+   *
+   * A column repeating one value down the whole table costs horizontal room on the screen this page
+   * most needs it — and reads as though it might vary.
+   */
+  protected readonly columns = computed<readonly TableColumn<InventoryItem>[]>(() =>
+    this.cartOnly()
+      ? this.allColumns.filter((column) => column.key !== 'location')
+      : this.allColumns,
+  );
+
   protected readonly filterChips = computed<readonly FilterChip[]>(() => {
     const filters = this.store.filters();
     const chips: FilterChip[] = [];
@@ -366,7 +419,9 @@ export class InventoryListPage {
       });
     }
 
-    if (filters.location !== null) {
+    /* No chip while pinned: every chip carries a remove button, so offering one here would hand
+       back the filter the pin exists to hold. The header states the scope instead. */
+    if (filters.location !== null && !this.cartOnly()) {
       chips.push({
         key: 'location',
         label: `Location: ${this.labelFor(this.locationOptions, filters.location)}`,
@@ -414,7 +469,7 @@ export class InventoryListPage {
     }
   }
 
-  protected readonly columns: readonly TableColumn<InventoryItem>[] = [
+  private readonly allColumns: readonly TableColumn<InventoryItem>[] = [
     { key: 'name', header: 'Item', value: (row) => row.name, sortable: true, primary: true },
     {
       key: 'category',
@@ -504,6 +559,15 @@ export class InventoryListPage {
      * the effect above issue a single already-filtered request, rather than fetching
      * everything and then fetching again.
      */
+    /*
+     * Pinned before the first request, so a manager never briefly sees warehouse rows. Set through
+     * the store's own setter rather than by reaching into its state, so the applied-filter chips and
+     * the request stay consistent with it.
+     */
+    if (this.cartOnly()) {
+      this.store.setLocation('CART');
+    }
+
     if (this.searchParam().length === 0) {
       this.store.load();
     }

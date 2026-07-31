@@ -163,11 +163,19 @@ export interface PosDaySummary {
   readonly paidCount: number;
   readonly pendingCount: number;
   readonly cancelledCount: number;
-  readonly revenue: number;
   readonly pendingAmount: number;
-  readonly averageOrderValue: number | null;
-  readonly byPaymentMethod: Readonly<Record<PaymentMethod, number>>;
   readonly itemsSold: number;
+
+  /*
+   * The day's takings, **absent for a caller without `POS_TAKINGS_READ`** — a Store Manager, today.
+   *
+   * Optional because the server omits them rather than sending zeros or nulls, so there is nothing
+   * to hide client-side: the tiles that show these render only when the numbers arrived. `null` on
+   * `averageOrderValue` is a different fact from absence — it means nothing has sold yet.
+   */
+  readonly revenue?: number;
+  readonly averageOrderValue?: number | null;
+  readonly byPaymentMethod?: Readonly<Record<PaymentMethod, number>>;
   /** `own` means these are the caller's takings, not the whole cart's. */
   readonly scope: 'all' | 'own';
 }

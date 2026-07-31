@@ -194,20 +194,48 @@ If you would rather use the form:
 ## 4. Point the frontend at the API
 
 **This is a code change, not a setting.** Angular bakes its configuration into the bundle at build
-time, so the API URL cannot be an environment variable on Vercel. `frontend/src/environments/environment.ts`
-still points at the old Railway host:
+time, so the API URL cannot be an environment variable on Vercel.
 
-```ts
-apiBaseUrl: 'https://paris-bites-api.up.railway.app/api/v1',
+The API host is named in **`frontend/vercel.json`**, as the destination of the `/api/:path*` rewrite:
+
+```json
+{ "source": "/api/:path*", "destination": "https://paris-bites-api.onrender.com/api/:path*" }
 ```
 
-Change it to your Render URL, keeping the `/api/v1` suffix:
+`frontend/src/environments/environment.ts` then addresses the API **relatively**, and must stay
+that way:
 
 ```ts
-apiBaseUrl: 'https://paris-bites-api.onrender.com/api/v1',
+apiBaseUrl: '/api/v1',
 ```
 
 Commit and push. Every future change of API host needs a rebuild — there is no runtime switch.
+
+### Why the API is proxied instead of called directly
+
+This looks like a needless hop, and it is load-bearing.
+
+The access token is held in memory only (`TokenStorageService`), so a page reload has no token and
+recovers the session from the httpOnly refresh cookie. Point the app straight at
+`onrender.com` and that cookie is **third-party**, because the app is on a different registrable
+domain. Mobile Safari blocks third-party cookies outright and Chrome's Tracking Protection does
+too, so the cookie is never stored and **every refresh returns the user to the login screen**.
+Desktop Chrome still allows them, so this passes every desktop test and fails on the first phone.
+
+Behind the rewrite the browser only ever addresses the app's own origin, so the cookie is
+first-party and is kept everywhere. CORS also drops out of the normal request path.
+
+Two consequences worth knowing:
+
+- The proxy adds a hop, so `req.ip` at the API would be Vercel's edge address — one rate-limit
+  bucket for all users, and a datacentre in the login audit trail. `TRUST_PROXY_HOPS` (default
+  `2`) is what counts the hops; a direct-to-Render frontend wants `1`.
+- The first request after the free instance sleeps travels through the proxy, so the cold start is
+  Vercel waiting on Render. See *Render free sleeps* below.
+
+The proper long-term fix is a custom domain — `app.parisbites.in` and `api.parisbites.in` share a
+registrable domain, so the cookie is first-party with no proxy at all. Until a domain is bought,
+this is the way.
 
 ## 5. Frontend — Vercel
 
@@ -230,7 +258,8 @@ stripped.
 | Setting | Why |
 | --- | --- |
 | `buildCommand` / `installCommand` / `outputDirectory` | Angular writes to `dist/frontend/browser`, which no framework preset would guess. `framework: null` stops Vercel auto-detecting and overriding these. |
-| `rewrites` → `index.html` | Angular is a client-side SPA. Every unknown path must return the shell so the router can resolve it; without this a deep link like `/pos/orders` is a CDN 404 before Angular ever loads. `assets/` is excluded so a genuinely missing file still 404s instead of silently returning HTML. |
+| `rewrites` → the API | Proxies `/api/*` to Render so the refresh cookie is first-party. Must come **first**: Vercel stops at the first matching rewrite, and the SPA catch-all would otherwise swallow every API call and answer it with HTML. |
+| `rewrites` → `index.html` | Angular is a client-side SPA. Every unknown path must return the shell so the router can resolve it; without this a deep link like `/pos/orders` is a CDN 404 before Angular ever loads. `api/` and `assets/` are excluded so API calls reach the proxy and a genuinely missing file still 404s instead of silently returning HTML. |
 | `Strict-Transport-Security` | Two years, subdomains included. Add `preload` and submit to hstspreload.org only once every subdomain is certainly HTTPS-only — it is effectively irreversible. |
 | Immutable cache on hashed assets | Angular fingerprints these filenames (`outputHashing: all`), so they can be cached permanently; a new deploy produces new names. |
 | `no-cache` on `index.html` | Otherwise users keep loading the previous app shell after a deploy, which references JS bundles that no longer exist. |
@@ -324,8 +353,10 @@ see [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 | Symptom | Cause |
 | --- | --- |
 | Login does nothing, network tab shows a blocked preflight | `CORS_ORIGINS` does not exactly match the Vercel origin |
-| Login succeeds, reload signs you out | `NODE_ENV` is not `production`, so the cookie is not `SameSite=None; Secure` |
-| Every API call 404s | `apiBaseUrl` missing the `/api/v1` suffix, or still pointing at Railway |
+| Login succeeds, reload signs you out **on a phone but not on a desktop** | The refresh cookie is being treated as third-party. Check `apiBaseUrl` is the relative `/api/v1` and that the `/api/:path*` rewrite is present and listed **before** the SPA catch-all in `vercel.json` — see step 4. Confirm with `curl -sI https://<app>/api/v1/health/live`: a JSON content-type means the proxy is live, HTML means the catch-all swallowed it |
+| Login succeeds, reload signs you out everywhere | `NODE_ENV` is not `production`, so the cookie is not `Secure` |
+| Every API call 404s | `apiBaseUrl` missing the `/api/v1` suffix, or the rewrite destination is wrong |
+| One user's failed logins rate-limit everybody; audit log shows one address for all logins | `TRUST_PROXY_HOPS` too low for the proxy chain — `2` behind the Vercel rewrite, `1` direct to Render |
 | First request of the day times out | Render cold start — see above |
 | `/health/ready` 503s but `/live` is fine | `DATABASE_URL` wrong, or Neon suspended and slow to wake |
 | Build fails on Render with a missing package | Root Directory is not `backend` |

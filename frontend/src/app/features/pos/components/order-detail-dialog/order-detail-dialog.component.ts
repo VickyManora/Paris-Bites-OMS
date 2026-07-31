@@ -21,6 +21,7 @@ import {
   type PaymentMethod,
 } from '../../models/pos.model';
 import { PosService } from '../../services/pos.service';
+import type { PbIconName } from '../../../../shared/components/icon/icon-registry';
 
 export interface OrderDetailDialogData {
   readonly orderId: string;
@@ -277,7 +278,7 @@ export class OrderDetailDialogComponent {
     return timestamp(iso);
   }
 
-  protected statusIcon(order: Order): string {
+  protected statusIcon(order: Order): PbIconName {
     return ORDER_STATUS_STYLE[order.status].icon;
   }
 

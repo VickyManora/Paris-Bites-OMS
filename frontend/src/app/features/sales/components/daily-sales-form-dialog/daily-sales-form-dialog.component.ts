@@ -56,7 +56,7 @@ export interface DailySalesFormDialogData {
     <pb-dialog-shell
       [title]="dialogTitle()"
       subtitle="One entry per trading day"
-      icon="point_of_sale"
+      icon="sales"
     >
       @if (formError(); as message) {
         <pb-inline-alert slot="error" [message]="message" />

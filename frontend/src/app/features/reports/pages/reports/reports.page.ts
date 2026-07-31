@@ -37,6 +37,7 @@ import { isNumericColumn } from '../../models/report.model';
 import { ReportsStore } from '../../services/reports-store.service';
 import { ReportService } from '../../services/report.service';
 import { count, money, quantity, timestamp } from '../../../../shared/utils/format.utils';
+import { IconComponent } from '../../../../shared/components/icon/icon.component';
 
 /**
  * The reports screen.
@@ -56,6 +57,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [ReportsStore],
   imports: [
+    IconComponent,
     PageHeaderComponent,
     CardComponent,
     ChartComponent,
@@ -81,7 +83,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
             [disabled]="exporting() !== null || result.rows.length === 0"
             (click)="download('xlsx')"
           >
-            <mat-icon>table_view</mat-icon>
+            <pb-icon name="exportExcel" [size]="16" class="mr-pb-1" />
             {{ exporting() === 'xlsx' ? 'Preparing…' : 'Excel' }}
           </button>
           <button
@@ -90,7 +92,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
             [disabled]="exporting() !== null || result.rows.length === 0"
             (click)="download('pdf')"
           >
-            <mat-icon>picture_as_pdf</mat-icon>
+            <pb-icon name="exportPdf" [size]="16" class="mr-pb-1" />
             {{ exporting() === 'pdf' ? 'Preparing…' : 'PDF' }}
           </button>
         </div>
@@ -101,7 +103,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
       <pb-spinner size="lg" label="Loading reports…" />
     } @else if (store.reports().length === 0) {
       <pb-empty-state
-        icon="lock"
+        iconName="locked"
         title="No reports available"
         message="Your role does not have access to any reports."
       />
@@ -203,7 +205,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
                 <span class="pb-badge pb-badge-pill pb-tone-neutral">{{ filter }}</span>
               }
               <button matButton type="button" class="ml-auto" (click)="store.clearFilters()">
-                <mat-icon>filter_alt_off</mat-icon>
+                <pb-icon name="searchEmpty" [size]="16" class="mr-pb-1" />
                 Clear
               </button>
             }
@@ -240,7 +242,7 @@ import { count, money, quantity, timestamp } from '../../../../shared/utils/form
           [loading]="store.loading()"
           [sortActive]="store.filters().sortField ?? ''"
           [sortDirection]="store.filters().sortDirection ?? ''"
-          emptyIcon="query_stats"
+          emptyIconName="analytics"
           emptyTitle="Nothing matches"
           emptyMessage="No rows for these filters. Try widening the date range or clearing the search."
           (sortChange)="onSort($event)"

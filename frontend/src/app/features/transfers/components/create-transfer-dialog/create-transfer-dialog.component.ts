@@ -55,7 +55,7 @@ interface LineForm {
     <pb-dialog-shell
       title="New transfer"
       subtitle="Move stock from the Home Warehouse to the Cart"
-      icon="swap_horiz"
+      icon="transfers"
     >
       <p class="text-pb-caption text-on-surface-variant">
         Home Warehouse → Cart. Stock moves when the transfer is approved.

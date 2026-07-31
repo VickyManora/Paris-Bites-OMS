@@ -401,10 +401,10 @@ import {
         <h3 class="m-0 mt-pb-3 text-pb-subtitle text-on-surface">Status</h3>
         <div class="mt-pb-2 flex flex-wrap gap-pb-2">
           <pb-status-badge tone="success" label="Paid" />
-          <pb-status-badge tone="warning" label="Awaiting payment" icon="schedule" />
-          <pb-status-badge tone="danger" label="Cancelled" icon="cancel" />
-          <pb-status-badge tone="info" label="In transit" icon="local_shipping" />
-          <pb-status-badge tone="neutral" label="Draft" icon="edit_note" />
+          <pb-status-badge tone="warning" label="Awaiting payment" icon="clock" />
+          <pb-status-badge tone="danger" label="Cancelled" icon="transferRejected" />
+          <pb-status-badge tone="info" label="In transit" icon="suppliers" />
+          <pb-status-badge tone="neutral" label="Draft" icon="edit" />
           <pb-status-badge tone="accent" label="Signature" />
           <pb-status-badge tone="neutral" label="No icon" [showIcon]="false" />
           <pb-status-badge tone="info" label="Square" [pill]="false" />

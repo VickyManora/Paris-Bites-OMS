@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
+import { IconComponent } from '../icon/icon.component';
 
 /** Which way the number moved. `flat` renders neutral, with no arrow. */
 export type MetricDirection = 'up' | 'down' | 'flat';
@@ -26,17 +26,14 @@ export type MetricDirection = 'up' | 'down' | 'flat';
 @Component({
   selector: 'pb-metric-badge',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [...MATERIAL_CORE_IMPORTS],
+  imports: [IconComponent],
   host: { class: 'inline-flex' },
   template: `
     <span [class]="classes()" [attr.aria-label]="ariaLabel()">
       @if (direction() !== 'flat') {
-        <mat-icon
-          class="!h-[--size-pb-icon-xs] !w-[--size-pb-icon-xs] !text-[length:--size-pb-icon-xs] shrink-0"
-          aria-hidden="true"
-        >
-          {{ direction() === 'up' ? 'arrow_upward' : 'arrow_downward' }}
-        </mat-icon>
+        <!-- 14px at stroke 2, matching 'pb-status-badge' — the two sit side by side on a stat
+             card and a lighter arrow beside a heavier tick reads as a rendering fault. -->
+        <pb-icon [name]="direction() === 'up' ? 'arrowUp' : 'arrowDown'" [size]="14" [strokeWidth]="2" />
       }
       <span class="tabular-nums">{{ value() }}</span>
       @if (caption()) {

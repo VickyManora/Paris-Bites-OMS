@@ -124,13 +124,25 @@ import { IconComponent } from '../icon/icon.component';
           (keydown.escape)="clear()"
         />
 
-        <mat-icon matPrefix class="!mr-2 text-on-surface-variant" aria-hidden="true">
-          search
-        </mat-icon>
+        <!--
+          The 'field' variant's icons, matched to the 'bar' variant above.
+
+          These were the last Material glyphs in a shared component, which meant the same search
+          control drew a filled magnifier on a page and an outline one in the topbar — the two are
+          side by side on every list screen. 'matPrefix'/'matSuffix' still position them; only the
+          glyph changed.
+        -->
+        <pb-icon matPrefix name="search" [size]="18" class="mr-pb-2 text-pb-text-muted" />
 
         @if (control.value.length > 0) {
-          <button matIconButton matSuffix type="button" aria-label="Clear search" (click)="clear()">
-            <mat-icon>close</mat-icon>
+          <button
+            matSuffix
+            type="button"
+            aria-label="Clear search"
+            class="mr-pb-1 grid h-9 w-9 shrink-0 cursor-pointer appearance-none place-items-center rounded-pb-md border-0 bg-transparent p-0 text-pb-text-secondary transition-colors duration-pb-fast ease-pb-out hover:bg-pb-hover-surface hover:text-pb-text motion-reduce:transition-none"
+            (click)="clear()"
+          >
+            <pb-icon name="close" [size]="16" />
           </button>
         }
 

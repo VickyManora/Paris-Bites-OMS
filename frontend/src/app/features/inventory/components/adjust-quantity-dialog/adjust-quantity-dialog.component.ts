@@ -47,7 +47,7 @@ type AdjustMode = 'add' | 'remove' | 'set';
     <pb-dialog-shell
       title="Adjust quantity"
       [subtitle]="item.name + ' · ' + item.locationLabel"
-      icon="tune"
+      icon="adjusted"
     >
       @if (formError(); as message) {
         <pb-inline-alert slot="error" [message]="message" />

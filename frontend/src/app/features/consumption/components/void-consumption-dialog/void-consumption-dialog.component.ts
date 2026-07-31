@@ -34,7 +34,7 @@ export interface VoidConsumptionDialogData {
   template: `
     <pb-dialog-shell
       [title]="'Void the sheet for ' + data.entryDate + '?'"
-      icon="undo"
+      icon="adjusted"
       tone="danger"
     >
       <p class="m-0 mb-pb-3 text-pb-body text-on-surface">
@@ -67,7 +67,7 @@ export interface VoidConsumptionDialogData {
         slot="actions"
         label="Void sheet"
         busyLabel="Voiding…"
-        icon="undo"
+        icon="adjusted"
         [minWidth]="150"
         (pressed)="submit()"
       />

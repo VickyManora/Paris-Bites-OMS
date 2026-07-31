@@ -24,6 +24,7 @@ import { money, plural } from '../../../../shared/utils/format.utils';
 import { OrderDetailDialogComponent } from '../../components/order-detail-dialog/order-detail-dialog.component';
 import { ORDER_STATUS_STYLE, type Order, type PosDaySummary } from '../../models/pos.model';
 import { PosService } from '../../services/pos.service';
+import type { PbIconName } from '../../../../shared/components/icon/icon-registry';
 
 /**
  * The POS home screen.
@@ -252,7 +253,7 @@ export class PosHomePage implements OnInit {
     return plural(value, word);
   }
 
-  protected statusIcon(order: Order): string {
+  protected statusIcon(order: Order): PbIconName {
     return ORDER_STATUS_STYLE[order.status].icon;
   }
 

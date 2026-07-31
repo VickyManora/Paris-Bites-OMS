@@ -48,7 +48,7 @@ export interface SupplierFormDialogData {
     <pb-dialog-shell
       [title]="isEdit() ? 'Edit supplier' : 'Add supplier'"
       subtitle="Where you buy from, and how their tax is treated"
-      icon="local_shipping"
+      icon="suppliers"
     >
       @if (formError(); as message) {
         <pb-inline-alert slot="error" [message]="message" />

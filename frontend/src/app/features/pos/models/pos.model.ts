@@ -1,5 +1,7 @@
 /** Mirrors the POS DTOs. */
 
+import type { PbIconName } from '../../../shared/components/icon/icon-registry';
+
 import type { BadgeTone } from '../../../shared/components/status-badge/status-badge.component';
 
 export const OrderStatus = {
@@ -43,12 +45,12 @@ export type DiscountType = (typeof DiscountType)[keyof typeof DiscountType];
  * drifted copies it was written to replace.
  */
 export const ORDER_STATUS_STYLE: Readonly<
-  Record<OrderStatus, { readonly icon: string; readonly tone: BadgeTone }>
+  Record<OrderStatus, { readonly icon: PbIconName; readonly tone: BadgeTone }>
 > = {
-  DRAFT: { icon: 'edit_note', tone: 'neutral' },
-  PENDING_PAYMENT: { icon: 'schedule', tone: 'warning' },
-  PAID: { icon: 'check_circle', tone: 'success' },
-  CANCELLED: { icon: 'cancel', tone: 'danger' },
+  DRAFT: { icon: 'edit', tone: 'neutral' },
+  PENDING_PAYMENT: { icon: 'clock', tone: 'warning' },
+  PAID: { icon: 'ok', tone: 'success' },
+  CANCELLED: { icon: 'transferRejected', tone: 'danger' },
 };
 
 /**

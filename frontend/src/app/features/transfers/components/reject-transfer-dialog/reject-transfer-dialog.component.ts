@@ -33,7 +33,7 @@ export interface RejectTransferDialogData {
     <pb-dialog-shell
       [title]="'Reject ' + data.reference + '?'"
       subtitle="No stock will move. The requester will see your reason."
-      icon="block"
+      icon="critical"
       tone="danger"
     >
       <form [formGroup]="form" class="pb-form" novalidate>
@@ -61,7 +61,7 @@ export interface RejectTransferDialogData {
         slot="actions"
         label="Reject transfer"
         busyLabel="Rejecting…"
-        icon="block"
+        icon="critical"
         [minWidth]="160"
         (pressed)="submit()"
       />

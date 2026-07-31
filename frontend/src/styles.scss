@@ -876,6 +876,78 @@ body {
 }
 
 // ---------------------------------------------------------------------------
+// Segmented control (button-toggle group)
+// ---------------------------------------------------------------------------
+//
+// The period selectors on Analytics, Reports and Notifications, and the adjust-reason picker in the
+// inventory dialog. Four screens, and the only styling any of them had was a height override — so
+// Material's default came through unthemed: square 4px corners, its own grey borders, and a selected
+// state carried almost entirely by a leading tick.
+//
+// That tick is the actual defect. Material marks the selected toggle by *inserting a check icon*,
+// which pushes the label sideways — so choosing a period visibly reflows the row, and in dark mode
+// the selected fill was close enough to the unselected one that the tick was the only signal at all.
+//
+// This is the segmented control Linear and Stripe use: one rounded container on the sunken surface,
+// the selected segment lifted onto the white surface with a hairline and a small shadow, and **no
+// icon** — the raised segment is the state. Nothing reflows when the choice changes.
+.mat-button-toggle-group {
+  --mat-standard-button-toggle-shape: var(--radius-pb-md);
+
+  border: 1px solid var(--color-pb-border);
+  border-radius: var(--radius-pb-lg);
+  background-color: var(--color-pb-surface-sunken);
+  padding: 3px;
+  gap: 2px;
+  overflow: hidden;
+
+  .mat-button-toggle {
+    border: 0;
+    border-radius: var(--radius-pb-md);
+    background-color: transparent;
+    color: var(--color-pb-text-secondary);
+    transition:
+      background-color var(--duration-pb-fast) var(--ease-pb-out),
+      color var(--duration-pb-fast) var(--ease-pb-out),
+      box-shadow var(--duration-pb-fast) var(--ease-pb-out);
+
+    // Material draws a 1px rule between segments. With gaps and a raised selected segment it is a
+    // third edge doing nothing.
+    + .mat-button-toggle {
+      border-left: 0;
+    }
+  }
+
+  .mat-button-toggle-button {
+    font-size: var(--text-pb-body);
+    font-weight: 550;
+  }
+
+  .mat-button-toggle:not(.mat-button-toggle-checked):hover {
+    background-color: var(--color-pb-hover-surface);
+    color: var(--color-pb-text);
+  }
+
+  .mat-button-toggle-checked {
+    background-color: var(--color-pb-surface);
+    color: var(--color-pb-text);
+    box-shadow: var(--shadow-pb-xs);
+  }
+
+  // The tick, removed. The raised segment already says which one is chosen, and inserting an icon
+  // into the selected item is what made the row reflow on every change.
+  .mat-pseudo-checkbox {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mat-button-toggle-group .mat-button-toggle {
+    transition: none;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Filter controls in a list toolbar
 // ---------------------------------------------------------------------------
 //

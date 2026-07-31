@@ -1,6 +1,8 @@
 import { booleanAttribute, ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
+import { IconComponent } from '../icon/icon.component';
+import type { PbIconName } from '../icon/icon-registry';
 
 /**
  * The frame every dialog in the app sits in: header, scrolling body, pinned footer.
@@ -35,7 +37,7 @@ import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
 @Component({
   selector: 'pb-dialog-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatDialogModule, ...MATERIAL_CORE_IMPORTS],
+  imports: [MatDialogModule, IconComponent, ...MATERIAL_CORE_IMPORTS],
   host: {
     class: 'block',
   },
@@ -47,9 +49,9 @@ import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
       header hold an icon and a subtitle while the accessible name stays the title text alone.
     -->
     <div mat-dialog-title class="!m-0 !flex !items-start !gap-pb-3 !p-pb-4 !pb-pb-3">
-      @if (icon()) {
+      @if (icon(); as name) {
         <span [class]="tileClass()" aria-hidden="true">
-          <mat-icon class="!h-5 !w-5 !text-[20px]">{{ icon() }}</mat-icon>
+          <pb-icon [name]="name" [size]="18" />
         </span>
       }
 
@@ -123,7 +125,7 @@ import { MATERIAL_CORE_IMPORTS } from '../../material/material-imports';
 export class DialogShellComponent {
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');
-  readonly icon = input<string>('');
+  readonly icon = input<PbIconName | null>(null);
 
   /**
    * Tone for the header icon tile. `danger` for a dialog that destroys something, so the framing is

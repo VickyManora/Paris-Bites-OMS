@@ -61,7 +61,7 @@ export interface ItemFormDialogData {
     <pb-dialog-shell
       [title]="isEdit() ? 'Edit item' : 'Add inventory item'"
       subtitle="What it is, how much there is, and when to reorder"
-      icon="inventory_2"
+      icon="inventory"
     >
       @if (formError(); as message) {
         <pb-inline-alert slot="error" [message]="message" />

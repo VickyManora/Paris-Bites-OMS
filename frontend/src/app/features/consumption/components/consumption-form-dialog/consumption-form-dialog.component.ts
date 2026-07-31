@@ -76,7 +76,7 @@ const MAX_LINES = 100;
     <pb-dialog-shell
       [title]="isEdit() ? 'Edit consumption' : 'Record consumption'"
       subtitle="Stock comes off when you save"
-      icon="restaurant"
+      icon="consumption"
     >
       @if (loading()) {
         <pb-spinner size="md" label="Loading stock…" />

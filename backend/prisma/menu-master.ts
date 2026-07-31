@@ -65,8 +65,10 @@ export const MENU: readonly MenuCategorySeed[] = [
     icon: '🍫',
     displayOrder: 3,
     products: [
-      { name: 'Any 2 Signature Bowls', price: 299 },
-      { name: 'Any 2 Premium Bowls', price: 399 },
+      // Both combo shots show two bowls from the tier they sell, which is the clearest way to
+      // photograph "any two" — a single bowl would look like one of the individual products.
+      { name: 'Any 2 Signature Bowls', price: 299 , image: '/products/any-2-signature-bowls.jpg' },
+      { name: 'Any 2 Premium Bowls', price: 399 , image: '/products/any-2-premium-bowls.jpg' },
     ],
   },
   {

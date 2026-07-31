@@ -31,6 +31,7 @@ import {
 } from '../../models/analytics.model';
 import { AnalyticsService } from '../../services/analytics.service';
 import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.utils';
+import { IconComponent } from '../../../../shared/components/icon/icon.component';
 
 /**
  * Analytics.
@@ -52,6 +53,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
   selector: 'pb-analytics-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IconComponent,
     PageHeaderComponent,
     CardComponent,
     ChartComponent,
@@ -71,7 +73,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
           [disabled]="exporting() !== null || data() === null"
           (click)="download('xlsx')"
         >
-          <mat-icon>table_view</mat-icon>
+          <pb-icon name="exportExcel" [size]="16" class="mr-pb-1" />
           {{ exporting() === 'xlsx' ? 'Preparing…' : 'Excel' }}
         </button>
         <button
@@ -80,7 +82,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
           [disabled]="exporting() !== null || data() === null"
           (click)="download('pdf')"
         >
-          <mat-icon>picture_as_pdf</mat-icon>
+          <pb-icon name="exportPdf" [size]="16" class="mr-pb-1" />
           {{ exporting() === 'pdf' ? 'Preparing…' : 'PDF' }}
         </button>
       </div>
@@ -156,20 +158,20 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
             label="Revenue"
             [value]="fmt(analytics.revenue.total)"
             [caption]="revenueCaption()"
-            icon="payments"
+            iconName="revenue"
           />
           <pb-stat-card
             label="Food cost"
             [value]="foodCostValue()"
             [caption]="foodCostCaption()"
-            icon="restaurant"
+            iconName="consumption"
             positiveWhen="down"
           />
           <pb-stat-card
             label="Inventory value"
             [value]="fmt(analytics.inventoryValue.total)"
             [caption]="inventoryCaption()"
-            icon="savings"
+            iconName="value"
           />
           <pb-stat-card
             label="Purchases"
@@ -179,7 +181,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
               ' invoice' +
               (analytics.purchases.invoices === 1 ? '' : 's')
             "
-            icon="receipt_long"
+            iconName="purchases"
           />
         </div>
 
@@ -193,13 +195,13 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
             label="Through the till"
             [value]="fmt(analytics.posRevenue.total)"
             [caption]="posCoverageCaption()"
-            icon="point_of_sale"
+            iconName="pos"
           />
           <pb-stat-card
             label="Counter orders"
             [value]="analytics.posRevenue.orders"
             [caption]="posOrdersCaption()"
-            icon="receipt"
+            iconName="spend"
           />
         </div>
 
@@ -231,7 +233,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
           <pb-card
             class="lg:col-span-2"
             title="Revenue and stock used"
-            icon="show_chart"
+            iconName="analytics"
             [subtitle]="trendSubtitle()"
           >
             @if (revenueChart(); as spec) {
@@ -246,19 +248,19 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
               }
             } @else {
               <pb-empty-state
-                icon="show_chart"
+                iconName="analytics"
                 title="Nothing in this period"
                 message="Record some sales, or widen the range."
               />
             }
           </pb-card>
 
-          <pb-card title="Revenue by channel" icon="donut_large">
+          <pb-card title="Revenue by channel" iconName="donut">
             @if (channelChart(); as spec) {
               <pb-chart [spec]="spec" />
             } @else {
               <pb-empty-state
-                icon="storefront"
+                iconName="pos"
                 title="No revenue yet"
                 message="Record a day's takings to see the split."
               />
@@ -267,11 +269,11 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
         </div>
 
         <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <pb-card title="Purchase trend" icon="local_shipping" [subtitle]="trendSubtitle()">
+          <pb-card title="Purchase trend" iconName="suppliers" [subtitle]="trendSubtitle()">
             <pb-chart [spec]="purchaseChart()" />
           </pb-card>
 
-          <pb-card title="Transfer trend" icon="swap_horiz" [subtitle]="transferSubtitle()">
+          <pb-card title="Transfer trend" iconName="transfers" [subtitle]="transferSubtitle()">
             <pb-chart [spec]="transferChart()" />
           </pb-card>
         </div>
@@ -279,7 +281,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
         <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <pb-card
             title="Most used ingredients"
-            icon="leaderboard"
+            iconName="leaderboard"
             subtitle="By quantity consumed in this period"
           >
             @if (ingredientChart(); as spec) {
@@ -299,7 +301,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
               </ul>
             } @else {
               <pb-empty-state
-                icon="restaurant"
+                iconName="consumption"
                 title="Nothing consumed"
                 message="Record a consumption sheet to see what the kitchen uses most."
               />
@@ -313,7 +315,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
           -->
           <pb-card
             title="Top selling products"
-            icon="emoji_events"
+            iconName="leaderboard"
             subtitle="From POS orders — counter trade only"
           >
             @if (productChart(); as spec) {
@@ -333,7 +335,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
               </ul>
             } @else {
               <pb-empty-state
-                icon="point_of_sale"
+                iconName="pos"
                 title="No counter sales yet"
                 message="Take an order through the POS and the best sellers appear here."
               />
@@ -342,7 +344,7 @@ import { money, moneyCompact, timestamp } from '../../../../shared/utils/format.
 
           <!-- Only rendered when there is genuinely something the data cannot answer. -->
           @if (analytics.unavailable.length > 0) {
-            <pb-card title="Not available" icon="info">
+            <pb-card title="Not available" iconName="info">
               <ul class="m-0 flex list-none flex-col gap-3 p-0">
                 @for (item of analytics.unavailable; track item.metric) {
                   <li>

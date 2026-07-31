@@ -146,7 +146,7 @@ If you would rather use the form:
    | Name | `paris-bites-api` |
    | Root Directory | `backend` |
    | Runtime | Node |
-   | Build Command | `npm ci && npm run build` |
+   | Build Command | `npm ci --include=dev && npm run build` |
    | Start Command | `npm start` |
    | Health Check Path | `/api/v1/health/live` |
    | Instance Type | Free |
@@ -313,6 +313,7 @@ see [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 | First request of the day times out | Render cold start — see above |
 | `/health/ready` 503s but `/live` is fine | `DATABASE_URL` wrong, or Neon suspended and slow to wake |
 | Build fails on Render with a missing package | Root Directory is not `backend` |
+| Build fails with `TS7016: Could not find a declaration file for module 'express'`, then dozens of implicit-any errors | The build command is missing `--include=dev`. `NODE_ENV=production` makes npm skip devDependencies, which is where TypeScript and every `@types/*` package live. The error names Express, so it reads as a missing dependency — it is a skipped one. Installing `@types/express` again does not help; it was already in the lockfile |
 | Deep links 404 on Vercel | Root Directory is not `frontend`, so `vercel.json` was never read |
 | Product images 404 | They live in `frontend/public/products` and ship with the frontend build — check the build log copied them |
 

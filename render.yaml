@@ -23,10 +23,21 @@ services:
 
     rootDir: backend
 
-    # `npm ci` for a lockfile-exact install. `build` runs `prisma generate && tsc`, and the
-    # `postinstall` hook also runs `prisma generate` — harmless, and it means the client exists even
-    # if the build step is ever changed.
-    buildCommand: npm ci && npm run build
+    # `--include=dev` is required, not optional.
+    #
+    # `NODE_ENV: production` is set below because the refresh cookie depends on it, and npm reads
+    # that variable during install: with it set, `npm ci` omits devDependencies entirely. TypeScript
+    # and every `@types/*` package live there, so the install succeeds and then `tsc` fails with 99
+    # errors — `TS7016: Could not find a declaration file for module 'express'` and a cascade of
+    # implicit-any. The message points at Express, which reads as a missing dependency rather than
+    # what it is: a dependency that was deliberately skipped.
+    #
+    # `--include=dev` overrides that for the build only. The runtime still needs nothing from
+    # devDependencies, because `startCommand` runs compiled JavaScript.
+    #
+    # `build` is `prisma generate && tsc`; the `postinstall` hook also runs `prisma generate`, which
+    # is harmless and means the client exists even if the build step is ever changed.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
 
     # Liveness, not readiness. `/live` reports only that the process is up; `/ready` opens a

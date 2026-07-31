@@ -23,8 +23,21 @@ import type { PbIconName } from '../../../../shared/components/icon/icon-registr
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent],
   host: {
-    // 'block' so the host itself is the spacing element; callers set no margins of their own.
-    class: 'block',
+    /*
+     * 'block' so the host itself is the spacing element; callers set no margins of their own.
+     *
+     * **'min-w-0' is what stops this section widening the page.** A grid item's automatic minimum
+     * size is its *min-content* width, and the hint below is 'truncate' — which is 'white-space:
+     * nowrap'. Nowrap text has a min-content width of the whole string, so when a caller puts two of
+     * these side by side (Tasks and Recent activity, in the admin dashboard's two-column band) the
+     * track grew to fit an untruncated 64-character hint: 524px of section in a 358px phone, and the
+     * whole app panned sideways inside MatSidenavContent.
+     *
+     * 'min-w-0' on the item makes that minimum zero, so the track takes the width it is given and
+     * the hint truncates as it was always meant to. It belongs here rather than on each caller
+     * because it is this component's own nowrap text that creates the floor.
+     */
+    class: 'block min-w-0',
   },
   template: `
     <section>

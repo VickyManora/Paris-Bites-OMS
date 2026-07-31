@@ -125,6 +125,32 @@ function shade(colour: string, amount: number): string {
 @Component({
   selector: 'pb-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    /*
+     * A block box that takes its width from its container and gives none back — load-bearing, not
+     * tidiness.
+     *
+     * Two things go wrong without this, both of them because **Apex renders the SVG at a fixed pixel
+     * width measured once, from this element, at render time**:
+     *
+     * **A custom element is 'display: inline' by default**, and an inline box wrapping a block child
+     * measures zero. Apex then sized itself from further up the tree and drew every chart one
+     * card-padding too wide — 358px of SVG in a 324px slot.
+     *
+     * **A fixed-width SVG feeds back into layout.** That 358px became the *min-content width* of the
+     * card holding it, so the card grew to 392px, and a grid track sized to its item's min-content
+     * grew with it — 34px past the phone's viewport, which is what let the dashboard pan sideways.
+     * Worse, the inflated card then measured 358px too, so the wrong width was self-consistent and
+     * Apex's own parent-resize correction (gated behind 'animationEnded', which is false while the
+     * 300ms intro plays) had nothing to notice.
+     *
+     * 'w-0 min-w-full' is what breaks that loop. A definite 'width: 0' contributes nothing to any
+     * ancestor's intrinsic width, so no chart can ever widen the card it sits in; 'min-width: 100%'
+     * then resolves against the container and hands back the real used width. The chart measures the
+     * slot it was given, first time, at every viewport.
+     */
+    class: 'block w-0 min-w-full',
+  },
   template: `<div #host class="w-full"></div>`,
 })
 export class ChartComponent {
@@ -498,7 +524,47 @@ export class ChartComponent {
       this.chart = chart;
       void chart.render();
 
+      /*
+       * Keeps the drawn width equal to the width of the slot it was drawn into.
+       *
+       * Apex measures its container **once**, when `render()` runs, and writes the result to the SVG
+       * as a fixed pixel width. That measurement is taken before the page has finished settling — on
+       * the dashboard it read the container a card-padding too wide and every chart stayed 34px over
+       * for the life of the page, with the right-hand end clipped off by the card.
+       *
+       * Apex does watch its own parent, but that path is gated on `animationEnded`: a container that
+       * reaches its final width during the 300ms intro — which is exactly when a first paint settles
+       * — is ignored. So the correction is done here instead, against the one measurement that is
+       * always right: the slot's own width, whenever it changes.
+       *
+       * There is no feedback loop to worry about. The host contributes no width to its ancestors (see
+       * the host classes), so what the chart draws can never change the box being measured; the
+       * observer's first callback is what corrects the initial render, and every later one covers
+       * rotation and the sidebar collapsing.
+       */
+      const observer = new ResizeObserver(() => {
+        const width = element.clientWidth;
+
+        if (width === 0) {
+          return;
+        }
+
+        const svg = element.querySelector('svg.apexcharts-svg');
+        const drawn = Number.parseFloat(svg?.getAttribute('width') ?? '0');
+
+        if (Math.abs(drawn - width) < 1) {
+          return;
+        }
+
+        // `false, false`: a resize is not a data change, and replaying the intro animation on every
+        // one of them would make a rotation look like a reload.
+        void chart.updateOptions({ chart: { width } }, false, false);
+      });
+
+      observer.observe(element);
+
       onCleanup(() => {
+        observer.disconnect();
         chart.destroy();
 
         if (this.chart === chart) {

@@ -222,6 +222,70 @@ html {
 }
 
 // ---------------------------------------------------------------------------
+// Filled buttons wear the website's gradient
+// ---------------------------------------------------------------------------
+//
+// `matButton="filled"` is the app's primary action in 35 places — Save, Add,
+// Record, Approve — and the customer-facing site builds its one call to action
+// as a 135° pink-to-caramel gradient. Making them the same object is the point
+// of the brand pass, so the gradient is applied to the Material role here rather
+// than by adding a class to 35 templates.
+//
+// **It is a `background-image`, not a colour, and that is deliberate.** Material
+// paints the container from `--mdc-filled-button-container-color`; leaving that
+// alone means the gradient sits over a fill that still resolves correctly if a
+// browser drops the image, and it keeps this rule to one property. The label is
+// re-pointed too, because white on either stop is under 2.2:1 — see the contrast
+// note on `pb-gradient-brand`, whose stops these are.
+//
+// Two exclusions:
+//
+// - **The sign-in page** (`.pb-auth-theme`) owns its own scoped palette and
+//   decided its primary button deliberately. A global rule reaching into a
+//   scoped theme is how a design system starts fighting itself.
+// - **A button that sets its own background** — the destructive one in the order
+//   dialog — uses `pb-btn-danger`, which clears the image. Red must stay red;
+//   there is no version of "delete" that should look like the brand.
+//
+// If a browser does not support the complex `:not()` below, the whole rule drops
+// and filled buttons stay the solid brand brown they were. That is the right way
+// to fail.
+// The doubled class is specificity, not a typo. Material's own button styles are injected as
+// component CSS at runtime — after this file — so at equal specificity *they* win, and the label
+// stayed white on a pastel at 1.7:1. `0,2,0` beats their `0,1,0` whatever the order, which is the
+// smallest hammer that works and needs no `!important`.
+.mat-mdc-unelevated-button.mat-mdc-unelevated-button:not(:disabled):not(.pb-auth-theme *) {
+  background-image: linear-gradient(135deg, var(--pb-pink-200) 0%, var(--pb-caramel-400) 100%);
+  --mdc-filled-button-label-text-color: var(--pb-sand-800);
+  color: var(--pb-sand-800);
+
+  transition:
+    background-image var(--duration-pb-fast) var(--ease-pb-out),
+    box-shadow var(--duration-pb-fast) var(--ease-pb-out),
+    transform var(--duration-pb-fast) var(--ease-pb-out);
+
+  &:hover {
+    background-image: linear-gradient(135deg, var(--pb-caramel-400) 0%, var(--pb-pink-200) 100%);
+    box-shadow: var(--shadow-pb-md);
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    background-image: linear-gradient(135deg, var(--pb-caramel-300) 0%, var(--pb-pink-300) 100%);
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: background-image var(--duration-pb-fast) var(--ease-pb-out);
+
+    &:hover,
+    &:active {
+      transform: none;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Brand-fixed surfaces
 // ---------------------------------------------------------------------------
 

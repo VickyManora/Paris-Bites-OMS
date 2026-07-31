@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Paris Bites">
+  <title>Paris Bites</title>
+  <!--
+    The 16px variant. Not a different icon — the same tower with detail removed.
+
+    16 pixels of height cannot hold four horizontal features. The full mark has a spire, two platforms
+    and a base spread; at 16px the spire and the upper platform land within a pixel of each other and
+    merge into a single smudge, which is why the detailed version reads as a letter A at that size.
+
+    So this drops the upper platform entirely and spends the pixels it frees on the three cues that
+    actually survive: a taller spire, one unmistakable platform, and heavier legs. Nothing here is
+    decoration — every stroke is at least a pixel wide once rasterised.
+
+    Only the 16×16 entry of `favicon.ico` uses this. Anything larger uses `favicon.svg`, which has the
+    room for the real thing.
+  -->
+  <rect width="64" height="64" rx="13" fill="#462c22" />
+
+  <g fill="none" stroke="#e3ca94" stroke-linecap="round">
+    <!-- Legs, heavier again and spread wider — at this size the silhouette is the whole message. -->
+    <path d="M9.5 54C21 46 27 33.5 30.4 14" stroke-width="4.4" />
+    <path d="M54.5 54C43 46 37 33.5 33.6 14" stroke-width="4.4" />
+
+    <!-- The one platform that survives. Deliberately low and wide, where the gap between the legs is
+         big enough for a bar to read as crossing them rather than filling them. -->
+    <path d="M16 37H48" stroke-width="4.2" />
+
+    <!-- A tall spire. Doing the work the missing upper platform used to do: it is what stops this
+         being a letter. -->
+    <path d="M32 4V15" stroke-width="3.4" />
+  </g>
+</svg>

@@ -186,12 +186,7 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
               <p class="text-pb-title m-0 font-bold">Could not load the menu</p>
               <p class="text-pb-caption m-0 mt-1 text-on-surface-variant">{{ menuError() }}</p>
             </div>
-            <button
-              matButton="filled"
-              type="button"
-              class="!h-12 !rounded-xl !bg-pos-brown !text-pos-vanilla"
-              (click)="loadMenu()"
-            >
+            <button matButton="filled" type="button" class="!h-12 !rounded-xl" (click)="loadMenu()">
               <mat-icon>refresh</mat-icon>
               Try again
             </button>

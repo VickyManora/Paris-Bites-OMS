@@ -19,7 +19,21 @@
     <!-- Set by ThemeService before first paint; this is the pre-hydration default. -->
     <meta name="theme-color" content="#ffffff" />
 
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <!--
+      The tab icon: the logo's Eiffel tower. Two files on purpose.
+
+      The SVG is the one browsers should use — it stays crisp on a retina tab and at whatever size
+      a bookmark bar or history entry asks for. Safari only gained SVG favicon support recently, and
+      some tooling reads neither, so `favicon.ico` stays as the fallback and is listed *second*:
+      browsers take the last usable declaration, so the order is what makes the SVG win where it is
+      supported.
+
+      The .ico carries 16/32/48 frames, and its 16px frame is drawn from `favicon-16.svg` — the same
+      tower with the upper platform removed, because four horizontal features do not fit in sixteen
+      pixels of height. See the comment in that file.
+    -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg" />
 
     <!--
       Progressive web app.

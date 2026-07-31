@@ -6,7 +6,7 @@
  *
  * ## The three layers, and why there are three
  *
- *   palette.css        `--pb-pink-500: #ff4d8d`      what colours exist          (a brand fact)
+ *   palette.css        `--pb-pink-200: #f8b4c3`      what colours exist          (a brand fact)
  *   design-system.css  `--color-pb-link: pink-700`   what each colour means      (a design fact)
  *   styles.scss        `--mat-sys-primary: …`        what Material renders with  (a plumbing fact)
  *
@@ -29,6 +29,19 @@
  * No page template, component class list, API or query was touched to do it. Every screen inherits
  * the new identity because every screen already reads these tokens and the Material roles bridged
  * to them in `styles.scss` — which is the entire argument for having had a token layer.
+ *
+ * ## And what changed in the brand pass after it
+ *
+ * The console now takes its colours from the customer-facing site (`paris-bite.vercel.app`) rather
+ * than from a set chosen alongside it: its cream is the page, its caramel is every hairline, its
+ * gold is the accent, its pink is the interaction colour, and its pink-to-caramel gradient is the
+ * primary button. The anchors and the derivation are documented in `palette.css`; this file only
+ * re-points names at them.
+ *
+ * Two things did **not** move, and both are load-bearing. The status hues stay outside the brand,
+ * so green still means safe on a page whose brand is pink. And every role a *label* resolves to is
+ * still chosen by measured contrast rather than by fidelity to the site — the site puts white on its
+ * pale pink at 1.7:1, and this system will not.
  */
 
 /*
@@ -49,29 +62,30 @@
    * separates surfaces by tinting them with the brand and floating them on shadows, which at three
    * cards per row turns a dashboard into a pile of slabs.
    *
-   * Here the page is `#fafafb`, every card on it is pure `#ffffff`, and what separates them is a
-   * 1px `--color-pb-border`. The shadow is nearly nothing — it exists to keep the white card from
-   * looking *pasted on*, not to lift it.
+   * Here the page is the site's cream `#faf8f5`, every card on it is pure `#ffffff`, and what
+   * separates them is a 1px `--color-pb-border` in warm caramel. The shadow is nearly nothing — it
+   * exists to keep the white card from looking *pasted on*, not to lift it.
    *
-   * `page` and `surface` are only 2% apart in lightness. That is intentional and it is enough: the
+   * `page` and `surface` are about 1% apart in lightness. That is intentional and it is enough: the
    * eye reads the border first and the tone second. A bigger gap is how you get a grey page that
-   * looks unfinished.
+   * looks unfinished — and a *warmer* page is how the console ends up looking like the website it
+   * belongs to, which is the whole reason this is cream rather than the cool `#fafafb` it was.
    * =================================================================== */
 
-  --color-pb-page: var(--pb-neutral-25); /*      the app background, behind everything */
-  --color-pb-surface: var(--pb-neutral-0); /*    cards, panels, inputs, menus — pure white */
-  --color-pb-surface-raised: var(--pb-neutral-0); /* popovers and dialogs: same white, more shadow */
-  --color-pb-surface-sunken: var(--pb-neutral-50); /* table headers, wells, empty states */
+  --color-pb-page: var(--pb-sand-25); /*         the app background — the site's own cream */
+  --color-pb-surface: var(--pb-sand-0); /*       cards, panels, inputs, menus — pure white */
+  --color-pb-surface-raised: var(--pb-sand-0); /* popovers and dialogs: same white, more shadow */
+  --color-pb-surface-sunken: var(--pb-sand-50); /* table headers, wells, empty states */
 
   /* Behind a dialog. Deep enough to mute the page, not so deep the page disappears — the user
    * should still see where they were. */
-  --color-pb-scrim: rgb(18 18 22 / 0.45);
+  --color-pb-scrim: rgb(42 26 18 / 0.45);
 
   /* The deliberately-opposite surface: a snackbar, a tooltip. Dark in light mode and light in dark,
    * because a transient message has to separate from the page it is covering, and matching it is how
    * a toast gets missed. */
-  --color-pb-inverse-surface: var(--pb-neutral-900);
-  --color-pb-inverse-text: var(--pb-neutral-25);
+  --color-pb-inverse-surface: var(--pb-sand-800);
+  --color-pb-inverse-text: var(--pb-sand-25);
 
   /* ===================================================================
    * TEXT
@@ -80,15 +94,24 @@
    * failure mode this prevents is the one every "premium, airy" redesign hits: light grey secondary
    * text that looks refined in the mockup and is unreadable on a laptop at an angle.
    *
-   * `muted` is the floor, and it is explicitly **not for prose** — it sits at 3.8:1, which is legal
-   * for a placeholder inside a field the user is about to type into and illegal for a sentence.
+   * `muted` is the floor, and unlike the version of this note that preceded it, the floor is now
+   * **legal for prose**: 4.5:1 against the darkest light surface in the system, 5.2:1 on a white
+   * card. It had to be. The rule said "placeholders only, never prose" and eleven call sites used it
+   * for captions, section overlines and hints anyway — a rule a design system cannot enforce is a
+   * rule it should stop making. Sixteen small-text AA failures across the app were the result, and
+   * they predate the brand pass: the token was `#82828f` at 3.8:1 before it was the site's grey.
+   *
+   * Three of the four are the site's own inks, and every one is stronger than the cool grey it
+   * replaced: body copy 16.1:1 → 14:1 (still AAA), secondary 6.1:1 → 8.9:1, muted 3.8:1 → 5.2:1.
    * =================================================================== */
 
-  --color-pb-text: var(--pb-neutral-900); /*           body and headings — 16.1:1 */
-  --color-pb-text-secondary: var(--pb-neutral-600); /*  captions, metadata, helper text — 6.1:1 */
-  --color-pb-text-muted: var(--pb-neutral-500); /*      placeholders only — 3.8:1, never prose */
-  --color-pb-text-disabled: var(--pb-neutral-400); /*   a control that cannot be used — 1.9:1 */
-  --color-pb-text-inverse: var(--pb-neutral-0); /*      on a brown, pink or dark fill */
+  --color-pb-text: var(--pb-sand-800); /*           body and headings — the site's dark, 14:1 */
+  --color-pb-text-secondary: var(--pb-sand-600); /*  captions, metadata, helper text — 8.9:1 */
+  --color-pb-text-muted: var(
+    --pb-sand-550
+  ); /*      captions, hints and placeholders — 4.5:1 at worst */
+  --color-pb-text-disabled: var(--pb-sand-400); /*   a control that cannot be used — 2.3:1 */
+  --color-pb-text-inverse: var(--pb-sand-0); /*      on a brown, deep pink or dark fill */
 
   /* ===================================================================
    * BORDERS
@@ -102,36 +125,42 @@
    * and a table look like a grid.
    * =================================================================== */
 
-  --color-pb-border-subtle: var(--pb-neutral-150); /*  row rules, section dividers inside a card */
-  --color-pb-border: var(--pb-neutral-200); /*         the edge of a card, input, menu */
-  --color-pb-border-strong: var(--pb-neutral-300); /*  hovered card, focused input, emphasised edge */
+  --color-pb-border-subtle: var(--pb-sand-100); /*  row rules, section dividers inside a card */
+  --color-pb-border: var(--pb-sand-200); /*         the edge of a card, input, menu */
+  --color-pb-border-strong: var(--pb-sand-300); /*  hovered card, focused input, emphasised edge */
 
   --pb-border-width: 1px;
 
   /* ===================================================================
    * PRIMARY — chocolate brown, and the discipline around it
    *
-   * `#3b2416` is the brand and it is 14.5:1 on white, which makes it the loudest thing this system
-   * can put on a page. Loud is correct for a submit button and wrong for everything else, so the
-   * brief's list is treated as exhaustive rather than illustrative:
+   * `#5a3a2e` — the site's own deep brown — is 10.1:1 on white, which makes it the heaviest mark
+   * this system can put on a page. Heavy is correct for a committed state and wrong for everything
+   * else, so the list is treated as exhaustive rather than illustrative:
    *
-   *   ✓ primary buttons   ✓ navigation   ✓ selected items   ✓ important actions
+   *   ✓ text and outlined button labels   ✓ navigation   ✓ selected items   ✓ dark fills
    *   ✗ headings   ✗ card borders   ✗ icons   ✗ table headers   ✗ anything decorative
    *
-   * The rejected list is the load-bearing half. Brown headings on beige cards is precisely the
+   * The rejected list is the load-bearing half. Brown headings on cream cards is precisely the
    * "generic ERP" the redesign is escaping, and it comes back the moment brown is available as a
-   * general-purpose dark colour. Headings use `--color-pb-text`, which is a near-black that lets the
-   * brown mean something when it does appear.
+   * general-purpose dark colour. Headings use `--color-pb-text`, which is the site's near-black and
+   * lets the brown mean something when it does appear.
    *
-   * **Hover goes lighter, not darker.** `#3b2416` is four points off black; darkening it produces a
-   * state change nobody can see. Lifting to `brown-600` is visible, and it matches how a light
-   * button dims on hover — both move *toward* the middle.
+   * **The filled primary button is no longer this colour.** It wears the site's pink-to-caramel
+   * gradient — see `pb-gradient-brand` below and the Material rule in `styles.scss`. What this token
+   * still paints is everything else Material resolves from the primary role: the *label* of a text
+   * or outlined button, a checkbox, a radio, a slider, a tab indicator, a progress bar. Those are
+   * marks and labels rather than fills, which is why they need the 10.1:1 and the button does not.
+   *
+   * **Hover goes lighter, not darker.** Darkening a colour this deep produces a state change nobody
+   * can see. Lifting to `brown-600` (8.2:1) is visible, and it matches how a light button dims on
+   * hover — both move *toward* the middle.
    * =================================================================== */
 
   --color-pb-primary: var(--pb-brown-800);
   --color-pb-primary-hover: var(--pb-brown-600);
   --color-pb-primary-pressed: var(--pb-brown-900);
-  --color-pb-on-primary: var(--pb-neutral-0); /*   white on brown — 14.5:1 */
+  --color-pb-on-primary: var(--pb-sand-0); /*   white on brown — 10.1:1 */
 
   /* The brown as a *tint*: a selected row, the active nav pill. Flat steps from the ramp rather than
    * a `color-mix` at the call site, so every selected thing in the app is the same beige. */
@@ -152,8 +181,8 @@
    * A revenue figure set in `#c89b5b` is the mistake this pair exists to prevent.
    * =================================================================== */
 
-  --color-pb-gold: var(--pb-gold-400); /*        the brand gold: rules, marks, the logo */
-  --color-pb-gold-fg: var(--pb-gold-600); /*     gold text — 4.8:1 */
+  --color-pb-gold: var(--pb-gold-400); /*        the site's gold: rules, marks, the logo */
+  --color-pb-gold-fg: var(--pb-gold-700); /*     gold text — 5.7:1 */
   --color-pb-gold-surface: var(--pb-gold-50); /*  behind a premium badge */
   --color-pb-gold-border: var(--pb-gold-100);
 
@@ -187,9 +216,11 @@
    * bright brand pink keeps every job where it is legal, which is most of them.
    * =================================================================== */
 
-  --color-pb-interactive: var(--pb-pink-500); /*   the brand pink: rings, rules, dots, marks */
-  --color-pb-link: var(--pb-pink-700); /*          link and pink text — 5.7:1 */
-  --color-pb-link-hover: var(--pb-pink-800);
+  --color-pb-interactive: var(
+    --pb-pink-500
+  ); /*   the interaction pink: rings, rules, dots — 3.6:1 */
+  --color-pb-link: var(--pb-pink-600); /*          link and pink text — 5.1:1 */
+  --color-pb-link-hover: var(--pb-pink-700);
 
   /* State washes. Very light on purpose: a hover tint is a hint that something is live, not a
    * selection. If the wash is strong enough to read as a state, hovering a list looks like the list
@@ -222,10 +253,10 @@
    * that may carry text. See the contrast note in `palette.css`.
    * =================================================================== */
 
-  --color-pb-neutral-surface: var(--pb-neutral-50);
-  --color-pb-neutral-border: var(--pb-neutral-200);
-  --color-pb-neutral-fg: var(--pb-neutral-600);
-  --color-pb-neutral-base: var(--pb-neutral-400);
+  --color-pb-neutral-surface: var(--pb-sand-50);
+  --color-pb-neutral-border: var(--pb-sand-200);
+  --color-pb-neutral-fg: var(--pb-sand-600);
+  --color-pb-neutral-base: var(--pb-sand-400);
 
   --color-pb-success-surface: var(--pb-success-50);
   --color-pb-success-border: var(--pb-success-200);
@@ -251,7 +282,7 @@
    * Gold surface, gold text — the one tone that is brand rather than semantic. */
   --color-pb-accent-surface: var(--pb-gold-50);
   --color-pb-accent-border: var(--pb-gold-100);
-  --color-pb-accent-fg: var(--pb-gold-600);
+  --color-pb-accent-fg: var(--pb-gold-700);
   --color-pb-accent-base: var(--pb-gold-400);
 
   /* ===================================================================
@@ -467,15 +498,16 @@
    * One series has no separation problem to solve, so this is the one place a chart can be brand
    * coloured without risking a collision — and most charts on the dashboard are single-series.
    *
-   * `pink-700` rather than the brand `#ff4d8d`: a chart line is a thin mark, and a thin mark needs
-   * the contrast of text rather than of a fill. `#ff4d8d` at 1px on white is a suggestion.
+   * `pink-700` rather than the site's pastel `#f8b4c3`: a chart line is a thin mark, and a thin mark
+   * needs the contrast of text rather than of a fill. The site's pink at 1px on white — 1.7:1 — is a
+   * suggestion, not a line.
    */
-  --color-pb-chart-brand: #c7175c;
+  --color-pb-chart-brand: #af1855;
 
   /* Chart chrome — the grid and axis labels. Kept much lighter than the marks: a grid that competes
    * with the data is a grid the reader has to look past. */
-  --color-pb-chart-grid: var(--pb-neutral-150);
-  --color-pb-chart-axis: var(--pb-neutral-500);
+  --color-pb-chart-grid: var(--pb-sand-100);
+  --color-pb-chart-axis: var(--pb-sand-500);
 
   /* ===================================================================
    * SKELETON
@@ -484,8 +516,8 @@
    * broken in dark mode.
    * =================================================================== */
 
-  --color-pb-skeleton-base: var(--pb-neutral-100);
-  --color-pb-skeleton-sheen: var(--pb-neutral-50);
+  --color-pb-skeleton-base: var(--pb-sand-100);
+  --color-pb-skeleton-sheen: var(--pb-sand-50);
 }
 
 /* =====================================================================
@@ -522,7 +554,10 @@
 
   --color-pb-text: #f2f2f5;
   --color-pb-text-secondary: #a1a1ad;
-  --color-pb-text-muted: #747480;
+  /* Lifted from `#747480` for the reason the light-mode note gives: this token carries captions and
+   * section overlines, and 4.0:1 on a card was a fail on every one of them. 5.4:1 on a card, 4.6:1 on
+   * a dialog — the darkest surface it can land on. */
+  --color-pb-text-muted: #8a8a95;
   --color-pb-text-disabled: #55555f;
   --color-pb-text-inverse: var(--pb-neutral-950);
 
@@ -538,16 +573,16 @@
 
   /* Tints become washes of the *light* primary at low alpha — a dark tint of a light colour is the
    * only way to keep "selected" reading as selected on a near-black card. */
-  --color-pb-primary-tint: rgb(234 217 203 / 0.08);
-  --color-pb-primary-tint-strong: rgb(234 217 203 / 0.14);
-  --color-pb-primary-tint-border: rgb(234 217 203 / 0.24);
+  --color-pb-primary-tint: rgb(237 215 194 / 0.08);
+  --color-pb-primary-tint-strong: rgb(237 215 194 / 0.14);
+  --color-pb-primary-tint-border: rgb(237 215 194 / 0.24);
 
   /* Gold needs no substitution on dark — `#c89b5b` is 6.4:1 on `#131318`, so the brand gold is
    * finally legal as text. This is the one token that gets *brighter* in dark mode. */
   --color-pb-gold: var(--pb-gold-400);
   --color-pb-gold-fg: var(--pb-gold-300);
-  --color-pb-gold-surface: rgb(200 155 91 / 0.12);
-  --color-pb-gold-border: rgb(200 155 91 / 0.28);
+  --color-pb-gold-surface: rgb(201 169 97 / 0.12);
+  --color-pb-gold-border: rgb(201 169 97 / 0.28);
 
   /* The bright pink is already correct on dark — it is the *link* that has to lighten, since
    * `pink-700` on a near-black card is as unreadable as `pink-500` on white. */
@@ -555,9 +590,9 @@
   --color-pb-link: var(--pb-pink-300);
   --color-pb-link-hover: var(--pb-pink-200);
 
-  --color-pb-hover-surface: rgb(255 77 141 / 0.1);
-  --color-pb-selected-surface: rgb(255 77 141 / 0.16);
-  --color-pb-selected-border: rgb(255 77 141 / 0.32);
+  --color-pb-hover-surface: rgb(228 81 128 / 0.12);
+  --color-pb-selected-surface: rgb(228 81 128 / 0.18);
+  --color-pb-selected-border: rgb(228 81 128 / 0.34);
 
   --color-pb-badge: var(--pb-pink-500);
   --color-pb-on-badge: var(--pb-neutral-950);
@@ -584,8 +619,8 @@
   --color-pb-info-border: rgb(59 130 246 / 0.3);
   --color-pb-info-fg: var(--pb-info-300-dark);
 
-  --color-pb-accent-surface: rgb(200 155 91 / 0.12);
-  --color-pb-accent-border: rgb(200 155 91 / 0.28);
+  --color-pb-accent-surface: rgb(201 169 97 / 0.12);
+  --color-pb-accent-border: rgb(201 169 97 / 0.28);
   --color-pb-accent-fg: var(--pb-gold-300);
 
   /*
@@ -614,7 +649,7 @@
   --color-pb-chart-4: #008300;
   --color-pb-chart-5: #e66767;
 
-  --color-pb-chart-brand: #ff6f9f;
+  --color-pb-chart-brand: #ee7a99;
 
   --color-pb-chart-grid: var(--pb-ink-700);
   --color-pb-chart-axis: #747480;
@@ -713,34 +748,58 @@
 }
 
 /*
- * The brand gradient: chocolate falling to a darker brown.
+ * A filled button that destroys something.
  *
- * Built for the counter, where a filled button is the thing a thumb aims at under fluorescent light
- * with a queue behind it. A gradient does one useful thing there that a flat fill cannot: it gives
- * the surface a **direction**, so the control reads as a raised object rather than as a coloured
- * rectangle, and a raised object is read as pressable without anyone deciding it is.
+ * Exists because filled buttons now carry the brand gradient globally (see the rule in
+ * `styles.scss`), and "Cancel this order" must not look like "Save". It clears the image and states
+ * the danger fill, so red stays red no matter what the primary treatment becomes next.
  *
- * ## Why it is 8% and not 40%
+ * White on `danger-700` measures 6.5:1. The base `#ef4444` would be 3.8:1 — a fill, not a fill under
+ * a label, which is the same distinction the palette draws for every brand hue.
+ */
+@utility pb-btn-danger {
+  background-image: none;
+  background-color: var(--pb-danger-700);
+  --mdc-filled-button-label-text-color: var(--pb-sand-0);
+  color: var(--pb-sand-0);
+
+  &:hover:not(:disabled) {
+    background-color: var(--pb-danger-800);
+    background-image: none;
+  }
+}
+
+/*
+ * The brand gradient: the website's primary button, reproduced.
  *
- * The two stops are `brown-700` and `brown-900` — a shade either side of the brand `brown-800`. That
- * is a narrow range on purpose. A gradient wide enough to be *noticed* as a gradient dates the
- * interface immediately: it reads as a 2010 button, and on a colour this dark it also muddies the
- * bottom third into near-black, so white text loses its footing on the part of the button most
- * likely to be under a thumb. At this width nobody sees a gradient; they see a button that looks
- * lit.
+ * `paris-bite.vercel.app` builds its one call to action as
+ * `linear-gradient(135deg, var(--color-primary), var(--color-secondary))` — its soft pink falling
+ * diagonally into its caramel — and reverses the two stops on hover while lifting the button 2px.
+ * That is copied here stop for stop, angle included, because it is the single most recognisable
+ * element the two products share: whatever else differs between a marketing page and an operations
+ * console, the button you press should be the same button.
  *
- * ## Hover and press
+ * ## The one thing that is not copied is the label colour
  *
- * Hover lifts *both* stops rather than shifting the angle — the object gets brighter, it does not
- * change shape. Press flattens to the darker end and drops the shadow, which is the whole
- * vocabulary of a physical key in two properties.
+ * The site sets `color: white` on this gradient. White on `#f8b4c3` is **1.7:1** and on `#d4a574` is
+ * 2.2:1 — invisible in daylight, and this utility sits on "Payment received", which is the control
+ * that ends a transaction. The label is therefore the site's own dark, `#2c2c2c`, which measures
+ * **8.2:1** on the pink stop, 7.2:1 through the middle and **6.3:1** on the caramel — AA at every
+ * point along the surface, including the part under a thumb.
  *
- * Contrast is unchanged from the flat brand: white on `brown-700` is 12.2:1 and on `brown-900` is
- * 16.6:1, so every part of the surface clears AA for large text several times over.
+ * Nothing about the identity is lost by that swap: the gradient is what carries the brand, and dark
+ * ink on a pastel is how the site's own body copy already reads.
+ *
+ * ## Hover, press and disabled
+ *
+ * Hover reverses the gradient and lifts 2px exactly as the site does, guarded for reduced motion —
+ * a marketing page may move a button under the cursor unconditionally; a till used all day should
+ * respect a user who asked it not to. Press flattens the lift and drops the shadow, which is the
+ * whole vocabulary of a physical key in two properties.
  */
 @utility pb-gradient-brand {
-  background-image: linear-gradient(180deg, var(--pb-brown-700) 0%, var(--pb-brown-900) 100%);
-  color: var(--color-pb-text-inverse);
+  background-image: linear-gradient(135deg, var(--pb-pink-200) 0%, var(--pb-caramel-400) 100%);
+  color: var(--pb-sand-800);
   box-shadow: var(--shadow-pb-sm);
   transition:
     background-image var(--duration-pb-fast) var(--ease-pb-out),
@@ -748,21 +807,31 @@
     transform var(--duration-pb-fast) var(--ease-pb-out);
 
   &:hover:not(:disabled) {
-    background-image: linear-gradient(180deg, var(--pb-brown-600) 0%, var(--pb-brown-800) 100%);
+    background-image: linear-gradient(135deg, var(--pb-caramel-400) 0%, var(--pb-pink-200) 100%);
     box-shadow: var(--shadow-pb-md);
+    transform: translateY(-2px);
   }
 
   &:active:not(:disabled) {
-    background-image: linear-gradient(180deg, var(--pb-brown-900) 0%, var(--pb-brown-950) 100%);
+    background-image: linear-gradient(135deg, var(--pb-caramel-300) 0%, var(--pb-pink-300) 100%);
     box-shadow: var(--shadow-pb-xs);
-    transform: translateY(1px);
+    transform: translateY(0);
   }
 
   &:disabled {
     background-image: none;
-    background-color: var(--pb-neutral-200);
+    background-color: var(--pb-sand-100);
     color: var(--color-pb-text-disabled);
     box-shadow: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: background-image var(--duration-pb-fast) var(--ease-pb-out);
+
+    &:hover:not(:disabled),
+    &:active:not(:disabled) {
+      transform: none;
+    }
   }
 }
 

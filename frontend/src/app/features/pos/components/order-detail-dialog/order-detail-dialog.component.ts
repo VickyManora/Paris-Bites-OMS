@@ -288,7 +288,7 @@ export interface OrderDetailDialogData {
             <button
               matButton="filled"
               type="button"
-              class="!bg-error !text-on-error"
+              class="pb-btn-danger"
               [disabled]="busy() || cancelReason().trim().length < 3"
               (click)="confirmCancel()"
             >

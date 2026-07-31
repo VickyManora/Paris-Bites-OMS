@@ -52,7 +52,14 @@ import type { PbIconName } from '../../../../shared/components/icon/icon-registr
     <div class="mx-auto flex max-w-6xl flex-col gap-4">
       <header class="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 class="text-pb-heading m-0 font-bold text-pos-brown">Point of sale</h1>
+          <!--
+            'text-pb-text', not 'text-pos-brown'. The POS paints its *cards* in a fixed brand
+            surface, but this title sits on the app page — which is cream in light mode and near
+            black in dark. The brand brown on that page measures 1.9:1: a page title nobody can
+            read in dark mode. The theme-aware ink is 14:1 either way. Headings inside the white
+            POS surfaces below stay brown, because there the brown is on white by construction.
+          -->
+          <h1 class="text-pb-heading m-0 font-bold text-pb-text">Point of sale</h1>
           <p class="text-pb-body m-0 text-on-surface-variant">
             {{ scopeLabel() }}
           </p>
@@ -72,7 +79,7 @@ import type { PbIconName } from '../../../../shared/components/icon/icon-registr
       <a
         matButton="filled"
         routerLink="/pos/new"
-        class="!flex !h-24 !items-center !justify-center !gap-3 !rounded-3xl !bg-pos-brown !text-pos-vanilla"
+        class="!flex !h-24 !items-center !justify-center !gap-3 !rounded-3xl"
       >
         <mat-icon class="!h-9 !w-9 !text-[36px]">add_shopping_cart</mat-icon>
         <span class="text-pb-heading font-bold">New order</span>

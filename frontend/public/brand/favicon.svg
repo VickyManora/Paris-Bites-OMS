@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Paris Bites">
+  <title>Paris Bites</title>
+  <!--
+    The tab icon: the logo's Eiffel tower, redrawn rather than cropped.
+
+    The brand mark is a gold wordmark with a filigree tower between "Paris" and "Bites". Scaled to
+    16px — which is the size that actually matters in a tab — the lettering is unreadable and the
+    tower's lattice turns to grey mush, because its finest strokes land well under a pixel. So this is
+    the same silhouette drawn for the size it will be seen at: four strokes, two platforms, a spire.
+
+    Strokes rather than a filled silhouette. A fill of this shape has to taper to a point at the top,
+    and a tapering fill is exactly what a 16px raster cannot hold; a round-capped stroke keeps a
+    minimum width no matter how far down it is scaled.
+
+    The gold is lifted from the site's #c9a961 accent to #e3ca94. The accent is specified for fills and
+    rules and never for text, at 2.3:1 — fine on a page, not enough to carry a 16px glyph against the
+    brown. This step is ~7:1 on #462c22 and still unmistakably the brand gold.
+  -->
+  <rect width="64" height="64" rx="13" fill="#462c22" />
+
+  <g fill="none" stroke="#e3ca94" stroke-linecap="round">
+    <!-- The two legs, meeting just under the spire. The curve is the tower's own concave sweep,
+         pushed harder than the photograph's: at 16px a gentle curve straightens into a plain A. -->
+    <path d="M10.5 53.5C21.5 45.5 27.5 33 30.6 13" stroke-width="3.8" />
+    <path d="M53.5 53.5C42.5 45.5 36.5 33 33.4 13" stroke-width="3.8" />
+
+    <!-- Platforms. Both are wider and heavier than scale alone would suggest, because they are the
+         only thing separating this silhouette from a letter once the lattice is gone. -->
+    <path d="M17 36H47" stroke-width="3.6" />
+    <path d="M23.5 24.5H40.5" stroke-width="3" />
+
+    <!-- The spire, tall enough to survive a 16px raster. Separate from the legs so it stays
+         vertical instead of inheriting their curve. -->
+    <path d="M32 5V13" stroke-width="2.8" />
+  </g>
+</svg>

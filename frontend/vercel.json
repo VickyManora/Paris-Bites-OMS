@@ -4,17 +4,12 @@
   "outputDirectory": "dist/frontend/browser",
   "installCommand": "npm ci",
   "framework": null,
-
-  "//": "Set Vercel's project Root Directory to `frontend`, so this file and the build both resolve from here.",
-
   "rewrites": [
     {
-      "//": "Angular is a client-side SPA: every unknown path must return index.html so the router can resolve it. Without this, a deep link like /products/42 is a 404 from the CDN before Angular ever loads.",
       "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ],
-
   "headers": [
     {
       "source": "/(.*)",
@@ -27,19 +22,16 @@
           "value": "camera=(), microphone=(), geolocation=()"
         },
         {
-          "//": "HSTS. Add `preload` and submit to hstspreload.org only once you are certain every subdomain is HTTPS-only.",
           "key": "Strict-Transport-Security",
           "value": "max-age=63072000; includeSubDomains"
         }
       ]
     },
     {
-      "//": "Angular fingerprints these filenames (outputHashing: all), so they are safe to cache permanently. A new deploy produces new names.",
       "source": "/(.*)\\.(js|css|woff2|png|svg|jpg|webp|ico)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "//": "index.html must never be cached, or users keep loading the old app shell after a deploy.",
       "source": "/index.html",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
     }

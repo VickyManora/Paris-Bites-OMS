@@ -219,6 +219,22 @@ Commit and push. Every future change of API host needs a rebuild — there is no
 3. No environment variables. The frontend has none — see step 4.
 4. Deploy. Note the URL, e.g. `https://paris-bites-oms.vercel.app`.
 
+### What `frontend/vercel.json` does, and why
+
+The rationale lives here rather than in the file, because **`vercel.json` cannot hold comments**.
+Every level of Vercel's schema is `additionalProperties: false` — the top level, `rewrites[]`,
+`headers[]` and each `headers[].headers[]` entry — so a `"//"` key used as a comment is not ignored,
+it fails validation and the deployment is rejected. The file carried five of them and had to be
+stripped.
+
+| Setting | Why |
+| --- | --- |
+| `buildCommand` / `installCommand` / `outputDirectory` | Angular writes to `dist/frontend/browser`, which no framework preset would guess. `framework: null` stops Vercel auto-detecting and overriding these. |
+| `rewrites` → `index.html` | Angular is a client-side SPA. Every unknown path must return the shell so the router can resolve it; without this a deep link like `/pos/orders` is a CDN 404 before Angular ever loads. `assets/` is excluded so a genuinely missing file still 404s instead of silently returning HTML. |
+| `Strict-Transport-Security` | Two years, subdomains included. Add `preload` and submit to hstspreload.org only once every subdomain is certainly HTTPS-only — it is effectively irreversible. |
+| Immutable cache on hashed assets | Angular fingerprints these filenames (`outputHashing: all`), so they can be cached permanently; a new deploy produces new names. |
+| `no-cache` on `index.html` | Otherwise users keep loading the previous app shell after a deploy, which references JS bundles that no longer exist. |
+
 ## 6. Close the loop
 
 Back on Render, correct two variables now that the frontend has an address:
@@ -315,6 +331,7 @@ see [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 | Build fails on Render with a missing package | Root Directory is not `backend` |
 | Build fails with `TS7016: Could not find a declaration file for module 'express'`, then dozens of implicit-any errors | The build command is missing `--include=dev`. `NODE_ENV=production` makes npm skip devDependencies, which is where TypeScript and every `@types/*` package live. The error names Express, so it reads as a missing dependency — it is a skipped one. Installing `@types/express` again does not help; it was already in the lockfile |
 | Deep links 404 on Vercel | Root Directory is not `frontend`, so `vercel.json` was never read |
+| Vercel rejects `vercel.json` as invalid | An unknown key somewhere in it. Every level of the schema is `additionalProperties: false`, so a `"//"` key used as a comment fails validation rather than being ignored. Validate with `npm run check:vercel-json` |
 | Product images 404 | They live in `frontend/public/products` and ship with the frontend build — check the build log copied them |
 
 ---

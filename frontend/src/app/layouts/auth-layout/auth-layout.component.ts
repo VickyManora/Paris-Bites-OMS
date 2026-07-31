@@ -8,8 +8,8 @@ import { RouterOutlet } from '@angular/router';
  * sidebar or account menu — both of which read authenticated state that does not
  * exist yet.
  *
- * This is the only screen dressed in the customer-facing brand: the cream-to-pink wash, the gold
- * serif wordmark and the Playfair/Poppins pairing all come from `auth-theme.css`, keyed off the
+ * This is the only screen dressed in the customer-facing brand: the cream-to-pink wash, the real
+ * gold lockup and the Playfair/Poppins pairing all come from `auth-theme.css`, keyed off the
  * `pb-auth-theme` class on the root element here. Past sign-in the app returns to the neutral
  * design system, where density and legibility matter more than atmosphere.
  */
@@ -21,18 +21,30 @@ import { RouterOutlet } from '@angular/router';
     <div class="pb-auth-theme flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <div class="w-full max-w-md">
         <div class="mb-8 text-center">
-          <p class="pb-auth-eyebrow m-0 text-[0.6875rem]">Chocolaterie &amp; Desserts</p>
           <!--
-            Sized in rem with a clamp rather than a Tailwind text utility: this is the one piece of
-            display type in the app, and it needs to shrink on a narrow phone without wrapping
-            mid-wordmark.
+            The real lockup, which already contains the wordmark and 'Chocolaterie & Desserts', so
+            neither is typeset again here.
+
+            'width'/'height' are the asset's own pixels — they only need to agree in ratio with the
+            rendered size for the browser to reserve the right space, which stops the card jumping
+            down the page as the image arrives. Displayed at roughly a third of that, so it stays
+            crisp on a 3x phone screen.
+
+            Not lazy-loaded on purpose: it is the largest thing above the fold, and 'lazy' would
+            delay the one image that should arrive first.
           -->
-          <h1
-            class="pb-auth-wordmark m-0 mt-1.5 text-[clamp(2.25rem,10vw,2.875rem)] leading-tight"
-          >
-            Paris Bites
+          <h1 class="m-0">
+            <img
+              src="brand/paris-bites-logo.webp"
+              alt="Paris Bites — Chocolaterie &amp; Desserts"
+              width="720"
+              height="469"
+              decoding="async"
+              fetchpriority="high"
+              class="mx-auto block h-auto w-[min(17.5rem,78vw)]"
+            />
           </h1>
-          <p class="m-0 mt-2 text-sm">Operations &amp; inventory console</p>
+          <p class="m-0 mt-4 text-sm">Operations &amp; inventory console</p>
         </div>
 
         <div class="pb-auth-card p-6 sm:p-8">

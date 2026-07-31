@@ -130,48 +130,22 @@
 }
 
 /*
- * The gold serif wordmark.
+ * There is no wordmark rule here, and there was one until the real lockup arrived.
  *
- * The reference's logo is a script face in an image asset that is not served, so this is an
- * honest approximation rather than a copy: Playfair Display italic in the brand gold, over the
- * same wide-tracked small-caps subtitle. `background-clip: text` gives the gold-to-caramel
- * shimmer the original has; `color` is set first so a browser without it still gets gold.
- */
-.pb-auth-wordmark {
-  font-family: var(--pb-auth-font-heading);
-  font-style: italic;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--pb-auth-gold);
-  background-image: linear-gradient(
-    100deg,
-    var(--pb-auth-gold) 0%,
-    var(--pb-auth-caramel) 48%,
-    var(--pb-auth-gold) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-/*
- * The wide-tracked `CHOCOLATERIE & DESSERTS` line above the wordmark, as on the reference site.
- * Which system you are signing in to is said underneath the wordmark instead, where it is read as
- * information rather than as part of the logo.
+ * `brand/paris-bites-logo.webp` carries the script wordmark, the Eiffel Tower and
+ * `CHOCOLATERIE & DESSERTS` as artwork, so typesetting any of them in Playfair Display would be
+ * a second, worse copy of the logo sitting next to the real one. Playfair Display is still loaded
+ * and still earns its place: it sets `Sign in` below.
  *
- * The mix is far darker than it looks like it should be, and that is the point: measured against
- * the cream-pink wash, the brand caramel at full strength is 2.6:1 and the marketing site's own
- * treatment would fail here. At 11px this is small text and owes a real 4.5:1, so the hue is kept
- * and the value dropped until it earns it — 5.3:1 as mixed. Lightening it is a regression, not a
- * refinement; if it needs to be brighter, make it bigger and bolder first.
+ * The logo is a JPEG with a white backdrop turned into real transparency, so it sits on the cream
+ * wash and on the dark theme without a white box behind it. The extraction keys on chroma as well
+ * as luminance — a plain brightness threshold removes the paper but eats the pale end of the gold
+ * gradient with it, since the two are nearly the same brightness.
+ *
+ * The print original is in `design-assets/`, deliberately not in `public/`: everything under
+ * `public/` is copied into the deployed bundle, and it is a 1.9 MB file no browser would ever ask
+ * for.
  */
-.pb-auth-eyebrow {
-  font-family: var(--pb-auth-font-body);
-  font-weight: 600;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: color-mix(in oklab, var(--pb-auth-caramel) 48%, var(--pb-auth-dark));
-}
 
 .pb-auth-heading {
   font-family: var(--pb-auth-font-heading);
@@ -280,9 +254,4 @@
 
 .dark .pb-auth-theme .pb-auth-heading {
   color: var(--pb-auth-cream);
-}
-
-/* 6.2:1 on the dark wash — the light-mode mix would sink into the background. */
-.dark .pb-auth-theme .pb-auth-eyebrow {
-  color: color-mix(in oklab, var(--pb-auth-caramel) 78%, var(--pb-auth-cream));
 }

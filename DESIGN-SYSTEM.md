@@ -303,6 +303,25 @@ card) and will not show up in a build.
 **The POS surface is white now**, not cream (`--color-pos-vanilla`). It was the single largest area
 of beige in the app, rendered full-screen on the till. The brown and gold are unchanged.
 
+## The one deliberate exception: the sign-in page
+
+`src/styles/auth-theme.css` is not part of this system and is not meant to be. The sign-in page
+wears the customer-facing brand from the marketing site — cream-to-pink wash, the gold lockup,
+Playfair Display over Poppins, 8/16/24 radii — because it is the one screen a staff member meets
+before the console proper. Everything past it is a tool.
+
+Three rules keep that from becoming a second, competing design system:
+
+- **It is scoped to `.pb-auth-theme`** on the auth layout root. Nothing leaks. Verified against the
+  built CSS: the brand font names appear in that selector and nowhere else.
+- **It restyles Material by overriding `--mat-sys-*` inside that scope**, never by selecting
+  `.mdc-*` internals, so a Material upgrade cannot break it.
+- **It does not add tokens to `design-system.css`.** Its palette would fail contrast on the dense
+  tables this system is built for, so it must not be reachable from them.
+
+Do not borrow from it. If a screen past sign-in needs warmth, the brown and gold accents already in
+this system are the way to get it.
+
 ## Adopting it
 
 The identity is live everywhere; what has *not* happened is any page being redesigned. A sensible

@@ -182,14 +182,38 @@
 }
 
 /*
- * Focus ring in brand pink, at a weight that is actually visible against white — the default
- * Material ring would inherit `primary`, which is now near-black and reads as a border rather
- * than as focus. Applied on `:focus-visible` only, so a pointer user never sees it.
+ * Focus.
+ *
+ * **A text field must not get a ring here.** `mat-form-field` already draws its own indicator —
+ * the notched outline thickens and takes `primary` — and the `<input>` sits *inside* that notch, so
+ * an `outline` on the input lands within the field and the control appears to have two nested
+ * borders. This rule used to say `:is(input, button, a, [tabindex])` and did exactly that: a pink
+ * rounded ring inside every focused field, at its most obvious in the error state where the outer
+ * outline is red and the inner one was pink. Do not add `input` back.
+ *
+ * Material's indicator is left alone rather than recoloured. Inside this scope it resolves to the
+ * brand dark in light mode (14:1 against the card) and the pink in dark mode (9.8:1) — both far
+ * past the 3:1 a focus indicator owes, and the outline changes weight as well as colour, so it
+ * reads as focus and not merely as a heavier border.
+ *
+ * Recolouring it is possible but not free: `--mdc-outlined-text-field-focus-outline-color` looks
+ * like the seam and is a dead end — the name is defined in the emitted theme but consumed nowhere,
+ * so setting it does nothing at all. The working route is Angular's `mat.form-field-overrides()`
+ * Sass mixin inside a scoped selector in `styles.scss`, which emits whatever token this version
+ * actually reads. Not worth it for a focus ring that already passes comfortably.
  */
-.pb-auth-theme :is(input, button, a, [tabindex]):focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--pb-auth-pink) 82%, var(--pb-auth-dark));
+.pb-auth-theme {
+  --pb-auth-focus: color-mix(in oklab, var(--pb-auth-pink) 82%, var(--pb-auth-dark));
+}
+
+/*
+ * Buttons and links only — the controls Material does not already indicate. Deliberately narrow:
+ * no bare `input` (see above), and no `[tabindex]`, which would catch container elements and
+ * outline a whole region.
+ */
+.pb-auth-theme :is(button, a):focus-visible {
+  outline: 2px solid var(--pb-auth-focus);
   outline-offset: 2px;
-  border-radius: var(--pb-auth-radius-sm);
 }
 
 /*

@@ -102,3 +102,10 @@
  * it, so importing this file changes how nothing currently renders.
  */
 @import './design-system.css';
+
+/*
+ * Brand theme for the sign-in page only. Entirely scoped to `.pb-auth-theme`, so importing it
+ * changes nothing anywhere else. Last, so it can override the design system's Material tokens
+ * inside that scope.
+ */
+@import './auth-theme.css';

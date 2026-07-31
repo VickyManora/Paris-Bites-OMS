@@ -40,9 +40,15 @@
     <!--
       Fonts. preconnect shaves a round trip off the TLS handshake.
 
+      Inter is the interface face for the whole app. Playfair Display and Poppins are
+      the *brand* faces, matching the customer-facing site, and are used only by the
+      sign-in page — see `auth-theme.css`. They ride along in the same request because
+      a second Google Fonts stylesheet would cost another round trip, while the font
+      binaries themselves are only fetched if something on screen actually uses them.
+
       Note the two different `display` strategies, which are not interchangeable:
 
-      - Inter uses `swap` — body text should appear immediately in a fallback face
+      - Text faces use `swap` — body text should appear immediately in a fallback face
         rather than leaving the page blank while the webfont downloads.
 
       - Material Symbols uses `block` — icons are LIGATURES, so `swap` renders the
@@ -51,14 +57,14 @@
         than a brief blank space, and it is what users on a slow connection or behind
         a proxy that blocks Google Fonts would otherwise see.
 
-      To drop the third-party dependency altogether, self-host both under
+      To drop the third-party dependency altogether, self-host these under
       public/fonts and replace these links with @font-face rules. Worth doing if
       Google Fonts is unacceptable for privacy reasons or the app must work offline.
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,600&family=Poppins:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
     <link

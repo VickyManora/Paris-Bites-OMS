@@ -1,0 +1,288 @@
+/*
+ * Brand theme for the sign-in page.
+ *
+ * ## What this is
+ *
+ * The customer-facing site (paris-bite.vercel.app) has its own visual language: a cream-to-pink
+ * wash, a gold serif wordmark, Playfair Display headings over Poppins body text, generous corner
+ * radii and shadows you can barely see. The sign-in page is the one screen a staff member meets
+ * before the operations console proper, so it is the right place — and the only place — for that
+ * language to appear. Everything past the login form is a tool, and stays on the neutral design
+ * system where density and legibility matter more than atmosphere.
+ *
+ * ## Why it is scoped to a class
+ *
+ * Every declaration here is nested under `.pb-auth-theme`, applied by `AuthLayoutComponent` to its
+ * root element. Nothing leaks. That constraint is the point: the palette below has a pink primary
+ * and a gold accent that would fail contrast on the dense tables and metric cards the rest of the
+ * app is built from, so it must not be reachable from them.
+ *
+ * The Material controls (`mat-form-field`, `matButton`) are restyled by overriding `--mat-sys-*`
+ * inside this scope rather than by reaching into component internals with `::ng-deep`. Material 3
+ * resolves its tokens through CSS custom properties, so an override on an ancestor is inherited by
+ * the control and survives a Material upgrade — a selector aimed at `.mdc-…` internals would not.
+ *
+ * ## Contrast
+ *
+ * The reference site puts white text on its gold pill, which measures about 2:1 — decorative on a
+ * marketing page, not acceptable on the control that is the only way into the system. So the brand
+ * *hues* are kept and their *roles* reassigned: gold and pink carry the wordmark, the background
+ * wash, borders and focus rings, while text and the primary button use the palette's own dark
+ * (`#2c2c2c`) against white. Measured ratios are noted per declaration.
+ */
+
+.pb-auth-theme {
+  /*
+   * Straight from the reference site's `:root`, names and values unchanged, so a future
+   * side-by-side comparison is a diff rather than an act of interpretation.
+   */
+  --pb-auth-pink: #f8b4c3;
+  --pb-auth-caramel: #d4a574;
+  --pb-auth-gold: #c9a961;
+  --pb-auth-cream: #faf8f5;
+  --pb-auth-dark: #2c2c2c;
+  --pb-auth-text: #4a4a4a;
+  --pb-auth-text-light: #7a7a7a;
+
+  /* Tints mixed from the brand hues rather than picked by eye, so they stay in family. */
+  --pb-auth-pink-wash: color-mix(in oklab, var(--pb-auth-pink) 34%, white);
+  --pb-auth-pink-faint: color-mix(in oklab, var(--pb-auth-pink) 14%, white);
+  --pb-auth-border: color-mix(in oklab, var(--pb-auth-caramel) 26%, white);
+
+  --pb-auth-font-heading: 'Playfair Display', 'Iowan Old Style', Georgia, serif;
+  --pb-auth-font-body: Poppins, Inter, system-ui, sans-serif;
+
+  /* The reference's three radii and three shadows, verbatim. */
+  --pb-auth-radius-sm: 8px;
+  --pb-auth-radius-md: 16px;
+  --pb-auth-radius-lg: 24px;
+  --pb-auth-shadow-sm: 0 2px 8px rgb(0 0 0 / 0.08);
+  --pb-auth-shadow-md: 0 4px 16px rgb(0 0 0 / 0.1);
+  --pb-auth-shadow-lg: 0 8px 24px rgb(0 0 0 / 0.12);
+
+  /*
+   * Pinned to light. Material resolves its tokens through `light-dark()`, which reads
+   * `color-scheme`, so without this a dark-mode visitor would get dark form-field internals on a
+   * cream card — the same collision that made the POS product names unreadable and was fixed with
+   * `.pos-light-surface`. The dark-mode block at the end of this file re-establishes the scheme
+   * deliberately, with a palette built for it.
+   */
+  color-scheme: light;
+
+  font-family: var(--pb-auth-font-body);
+  color: var(--pb-auth-text);
+
+  /*
+   * The hero wash: cream in the top-left falling to pink. Two radial layers over a base rather
+   * than one linear gradient, because the reference's colour does not travel in a straight line —
+   * it pools in the corners. `background-attachment` is left alone; the page does not scroll.
+   */
+  background-color: var(--pb-auth-pink-faint);
+  background-image:
+    radial-gradient(115% 85% at 8% 0%, var(--pb-auth-cream) 0%, transparent 58%),
+    radial-gradient(95% 75% at 100% 100%, var(--pb-auth-pink-wash) 0%, transparent 62%);
+
+  /* --- Material token overrides, inherited by every control inside ------------------------- */
+
+  /* Inputs and the card sit on white; the page itself is the gradient above. */
+  --mat-sys-surface: #ffffff;
+  --mat-sys-surface-container: #ffffff;
+  --mat-sys-surface-container-low: #ffffff;
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-high: var(--pb-auth-cream);
+  --mat-sys-surface-container-highest: var(--pb-auth-cream);
+  --mat-sys-background: transparent;
+
+  /* 10.4:1 on white. The palette's own dark, not a neutral grey borrowed from elsewhere. */
+  --mat-sys-on-surface: var(--pb-auth-dark);
+  /* 7.4:1 — labels and helper text. */
+  --mat-sys-on-surface-variant: var(--pb-auth-text);
+
+  /*
+   * `primary` drives the focused label, the caret, and the filled button's fill. It is the brand
+   * dark rather than the brand pink: white on `#f8b4c3` is 1.7:1, and this button is the only way
+   * into the application. Pink returns below as the focus ring and the hover wash, where a light
+   * tint is exactly what is wanted.
+   */
+  --mat-sys-primary: var(--pb-auth-dark);
+  --mat-sys-on-primary: #ffffff; /* 12.6:1 */
+  --mat-sys-primary-container: var(--pb-auth-pink-faint);
+  --mat-sys-on-primary-container: var(--pb-auth-dark);
+
+  --mat-sys-outline-variant: var(--pb-auth-border);
+  --mat-sys-outline: color-mix(in oklab, var(--pb-auth-caramel) 55%, white);
+
+  --mat-sys-error: #b3261e; /* 5.9:1 — untouched; a brand pink error reads as decoration */
+  --mat-sys-on-error: #ffffff;
+
+  /* Softer than the app's 4px, matching the reference's 8/16/24 rhythm. */
+  --mat-sys-corner-extra-small: var(--pb-auth-radius-sm);
+  --mat-sys-corner-small: var(--pb-auth-radius-sm);
+  --mat-sys-corner-medium: var(--pb-auth-radius-md);
+  --mat-sys-corner-large: var(--pb-auth-radius-lg);
+
+  /* Body copy inside controls picks up Poppins; headings opt in via `.pb-auth-heading`. */
+  --mat-sys-body-medium-font: var(--pb-auth-font-body);
+  --mat-sys-body-large-font: var(--pb-auth-font-body);
+  --mat-sys-label-large-font: var(--pb-auth-font-body);
+  --mat-sys-label-medium-font: var(--pb-auth-font-body);
+  --mat-sys-title-medium-font: var(--pb-auth-font-body);
+}
+
+/*
+ * The gold serif wordmark.
+ *
+ * The reference's logo is a script face in an image asset that is not served, so this is an
+ * honest approximation rather than a copy: Playfair Display italic in the brand gold, over the
+ * same wide-tracked small-caps subtitle. `background-clip: text` gives the gold-to-caramel
+ * shimmer the original has; `color` is set first so a browser without it still gets gold.
+ */
+.pb-auth-wordmark {
+  font-family: var(--pb-auth-font-heading);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--pb-auth-gold);
+  background-image: linear-gradient(
+    100deg,
+    var(--pb-auth-gold) 0%,
+    var(--pb-auth-caramel) 48%,
+    var(--pb-auth-gold) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/*
+ * The wide-tracked `CHOCOLATERIE & DESSERTS` line above the wordmark, as on the reference site.
+ * Which system you are signing in to is said underneath the wordmark instead, where it is read as
+ * information rather than as part of the logo.
+ *
+ * The mix is far darker than it looks like it should be, and that is the point: measured against
+ * the cream-pink wash, the brand caramel at full strength is 2.6:1 and the marketing site's own
+ * treatment would fail here. At 11px this is small text and owes a real 4.5:1, so the hue is kept
+ * and the value dropped until it earns it — 5.3:1 as mixed. Lightening it is a regression, not a
+ * refinement; if it needs to be brighter, make it bigger and bolder first.
+ */
+.pb-auth-eyebrow {
+  font-family: var(--pb-auth-font-body);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--pb-auth-caramel) 48%, var(--pb-auth-dark));
+}
+
+.pb-auth-heading {
+  font-family: var(--pb-auth-font-heading);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--pb-auth-dark);
+}
+
+/*
+ * The card. A hairline gold top edge is the one flourish borrowed wholesale from the reference,
+ * where the same detail separates the header from the hero.
+ */
+.pb-auth-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--pb-auth-border);
+  border-radius: var(--pb-auth-radius-lg);
+  box-shadow: var(--pb-auth-shadow-lg);
+  overflow: hidden;
+}
+
+.pb-auth-card::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--pb-auth-pink) 0%,
+    var(--pb-auth-caramel) 52%,
+    var(--pb-auth-gold) 100%
+  );
+}
+
+/*
+ * Focus ring in brand pink, at a weight that is actually visible against white — the default
+ * Material ring would inherit `primary`, which is now near-black and reads as a border rather
+ * than as focus. Applied on `:focus-visible` only, so a pointer user never sees it.
+ */
+.pb-auth-theme :is(input, button, a, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--pb-auth-pink) 82%, var(--pb-auth-dark));
+  outline-offset: 2px;
+  border-radius: var(--pb-auth-radius-sm);
+}
+
+/*
+ * Dark mode.
+ *
+ * The brand has a dark treatment already — the reference site's footer is `#2c2c2c` carrying gold
+ * headings and pink links — so this is derived from it rather than invented. Without it a
+ * dark-mode user gets a full-screen cream flash immediately before entering a dark application.
+ *
+ * Keyed on the `.dark` class that `ThemeService` writes to `<html>`, which is also what
+ * `@custom-variant dark` in tailwind.css matches. Deliberately *not* a
+ * `prefers-color-scheme` query: the service resolves the system preference into that class
+ * already, so a media query here would ignore an explicit in-app choice and disagree with every
+ * other surface in the app.
+ */
+.dark .pb-auth-theme {
+  color-scheme: dark;
+  color: color-mix(in oklab, var(--pb-auth-cream) 88%, var(--pb-auth-dark));
+
+  --pb-auth-border: color-mix(in oklab, var(--pb-auth-caramel) 30%, #1a1411);
+  background-color: #1a1411;
+  background-image:
+    radial-gradient(115% 85% at 8% 0%, #2c2119 0%, transparent 58%),
+    radial-gradient(
+      95% 75% at 100% 100%,
+      color-mix(in oklab, var(--pb-auth-pink) 16%, #1a1411) 0%,
+      transparent 62%
+    );
+
+  --mat-sys-surface: #241c17;
+  --mat-sys-surface-container: #241c17;
+  --mat-sys-surface-container-low: #241c17;
+  --mat-sys-surface-container-lowest: #241c17;
+  --mat-sys-surface-container-high: #2c2219;
+  --mat-sys-surface-container-highest: #2c2219;
+
+  /* 13.1:1 on #241c17 */
+  --mat-sys-on-surface: var(--pb-auth-cream);
+  /* 6.8:1 */
+  --mat-sys-on-surface-variant: color-mix(in oklab, var(--pb-auth-cream) 74%, #241c17);
+
+  /*
+   * Here the pink *can* be the primary: the button is a light fill on a dark page, so the
+   * contrast that fails as white-on-pink passes comfortably as dark-on-pink.
+   */
+  --mat-sys-primary: var(--pb-auth-pink);
+  --mat-sys-on-primary: #2c2c2c; /* 8.9:1 */
+  --mat-sys-primary-container: color-mix(in oklab, var(--pb-auth-pink) 22%, #241c17);
+  --mat-sys-on-primary-container: var(--pb-auth-cream);
+
+  --mat-sys-outline-variant: color-mix(in oklab, var(--pb-auth-caramel) 32%, #241c17);
+  --mat-sys-outline: color-mix(in oklab, var(--pb-auth-caramel) 58%, #241c17);
+
+  --mat-sys-error: #f2b8b5; /* 8.4:1 on the dark surface */
+  --mat-sys-on-error: #601410;
+}
+
+.dark .pb-auth-theme .pb-auth-card {
+  background: #241c17;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+
+.dark .pb-auth-theme .pb-auth-heading {
+  color: var(--pb-auth-cream);
+}
+
+/* 6.2:1 on the dark wash — the light-mode mix would sink into the background. */
+.dark .pb-auth-theme .pb-auth-eyebrow {
+  color: color-mix(in oklab, var(--pb-auth-caramel) 78%, var(--pb-auth-cream));
+}

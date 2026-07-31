@@ -75,7 +75,7 @@ function loginIdentifier(control: AbstractControl): ValidationErrors | null {
       novalidate
     >
       <div class="mb-pb-2">
-        <h2 class="m-0 text-pb-heading text-on-surface">Sign in</h2>
+        <h2 class="pb-auth-heading m-0 text-[1.625rem] leading-tight">Sign in</h2>
         <p class="m-0 mt-pb-1 text-pb-body text-on-surface-variant">
           Use your Paris Bites account to continue.
         </p>

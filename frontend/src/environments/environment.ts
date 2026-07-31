@@ -10,7 +10,17 @@ import type { AppEnvironment } from './environment.model';
  */
 export const environment: AppEnvironment = {
   production: true,
-  apiBaseUrl: 'https://paris-bites-api.up.railway.app/api/v1',
+  /*
+   * Baked in at build time, which is why this is code and not a platform setting.
+   *
+   * Angular compiles this file into the bundle, so Vercel cannot supply it as an environment
+   * variable — changing the API host means a commit and a redeploy. Worth knowing before hunting
+   * for a dashboard field that does not exist.
+   *
+   * The `/api/v1` suffix is part of it: `apiUrlInterceptor` prefixes every relative request with
+   * this string verbatim, so dropping the version turns every call into a 404.
+   */
+  apiBaseUrl: 'https://paris-bites-api.onrender.com/api/v1',
   appName: 'Paris Bites',
   /** Warn level and above — debug logging would leak internals to the console. */
   logLevel: 'warn',

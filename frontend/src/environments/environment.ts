@@ -11,16 +11,25 @@ import type { AppEnvironment } from './environment.model';
 export const environment: AppEnvironment = {
   production: true,
   /*
-   * Baked in at build time, which is why this is code and not a platform setting.
+   * Deliberately a *relative* path, not the API's own host.
    *
-   * Angular compiles this file into the bundle, so Vercel cannot supply it as an environment
-   * variable — changing the API host means a commit and a redeploy. Worth knowing before hunting
-   * for a dashboard field that does not exist.
+   * `vercel.json` rewrites `/api/*` to the Render service, so every request leaves the browser
+   * addressed to the same origin as the app. That is the only reason a page reload keeps the
+   * user signed in: the access token is held in memory (see `TokenStorageService`), so surviving
+   * a reload depends entirely on the httpOnly refresh cookie — and pointing straight at
+   * `onrender.com` made that cookie **third-party**. Mobile Safari blocks third-party cookies
+   * outright and Chrome's Tracking Protection does too, so the phone refused to store it and
+   * every refresh landed back on the login screen. Desktop Chrome still allows them, which is
+   * why this only showed up on mobile.
    *
-   * The `/api/v1` suffix is part of it: `apiUrlInterceptor` prefixes every relative request with
-   * this string verbatim, so dropping the version turns every call into a 404.
+   * Behind the proxy the cookie is first-party, so it is stored everywhere, and the API is
+   * same-origin, so CORS stops being involved in normal traffic at all.
+   *
+   * Changing the API host is therefore an edit to `vercel.json`, not to this file. The `/api/v1`
+   * prefix must stay: `apiUrlInterceptor` prepends this string verbatim, so dropping the version
+   * turns every call into a 404.
    */
-  apiBaseUrl: 'https://paris-bites-api.onrender.com/api/v1',
+  apiBaseUrl: '/api/v1',
   appName: 'Paris Bites',
   /** Warn level and above — debug logging would leak internals to the console. */
   logLevel: 'warn',

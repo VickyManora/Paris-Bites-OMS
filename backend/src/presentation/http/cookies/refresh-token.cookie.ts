@@ -10,9 +10,10 @@ import { cookieOptions } from '../../../config/env.js';
  *                 This is the whole reason the refresh token lives in a cookie
  *                 while the access token stays in memory.
  * - `secure`    — HTTPS only in production.
- * - `sameSite`  — `none` in production because Vercel and Railway are different
- *                 sites; `lax` locally. See `requireFetchIntent` for how the
- *                 resulting CSRF exposure is closed.
+ * - `sameSite`  — `none` in production, `lax` locally. See `requireFetchIntent` for how the
+ *                 resulting CSRF exposure is closed, and `COOKIE_SAME_SITE` in `env.ts` for why
+ *                 `none` is no longer strictly required now that Vercel proxies `/api/*` to the
+ *                 API and the browser sees a single origin.
  * - `path`      — scoped to the auth routes, so it is not attached to every
  *                 unrelated API request.
  */

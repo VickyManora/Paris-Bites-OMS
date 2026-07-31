@@ -31,11 +31,11 @@ import { createApiRouter } from './presentation/http/routes/index.js';
 export function createApp(container: AppContainer): Express {
   const app = express();
 
-  // Railway terminates TLS at its edge. Without this, `req.ip` is the proxy's
-  // address — which would make the rate limiter treat all traffic as one client
-  // and `req.protocol` report http.
+  // TLS terminates at the edge, so without this `req.ip` is a proxy's address — the rate
+  // limiter would treat all traffic as one client and `req.protocol` would report http.
+  // The hop count is configurable because it depends on the deployment; see `TRUST_PROXY_HOPS`.
   if (isProduction) {
-    app.set('trust proxy', 1);
+    app.set('trust proxy', env.TRUST_PROXY_HOPS);
   }
 
   app.disable('x-powered-by');

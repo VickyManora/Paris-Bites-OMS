@@ -123,11 +123,18 @@ const envSchema = z.object({
   /**
    * Refresh-token cookie attributes.
    *
-   * In production the Angular app (Vercel) and the API (Railway) are on different
-   * registrable domains, so the cookie is cross-site and needs
-   * `SameSite=None; Secure` to be sent at all. Locally, both are on `localhost`,
-   * where `Lax` works and `Secure` would stop the cookie from being stored over
-   * plain HTTP — hence the separate defaults per environment.
+   * The production default is `SameSite=None; Secure`, which dates from the app and the API
+   * being on different registrable domains (Vercel and Render). They no longer are: Vercel
+   * rewrites `/api/*` to this service, so the browser sees one origin and the cookie is
+   * first-party. `None` is still correct — it means "send in every context", which includes
+   * same-site — and is left as the default so a direct-to-Render frontend keeps working.
+   *
+   * Setting `COOKIE_SAME_SITE=lax` behind the proxy is a small hardening win: it makes the
+   * browser itself refuse the cookie on cross-site requests instead of leaving CSRF entirely to
+   * `requireFetchIntent`. Do not set it while any client still calls the API cross-origin.
+   *
+   * Locally both are on `localhost`, where `Lax` works and `Secure` would stop the cookie being
+   * stored over plain HTTP — hence the separate defaults per environment.
    */
   COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).optional(),
   COOKIE_SECURE: z
@@ -147,6 +154,23 @@ const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter((origin) => origin.length > 0),
     ),
+
+  /**
+   * How many reverse proxies sit in front of this process, counted from the app outwards.
+   *
+   * `req.ip` is only as trustworthy as this number, and two things depend on it: the rate
+   * limiter's per-client bucket and the address recorded against every login attempt.
+   *
+   * In production the chain is browser → Vercel's edge (the `/api/*` rewrite in `vercel.json`)
+   * → Render's router → here, so two hops belong to us. Set it too low and `req.ip` resolves to
+   * Vercel's edge address: every user lands in one rate-limit bucket and the audit trail records
+   * a datacentre instead of a device. Set it too high and a client can spoof its address by
+   * sending its own `X-Forwarded-For`.
+   *
+   * Configurable rather than hard-coded because the correct value is a property of the
+   * deployment, not of the code — a direct-to-Render setup with no proxy in front wants 1.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().positive().default(2),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),

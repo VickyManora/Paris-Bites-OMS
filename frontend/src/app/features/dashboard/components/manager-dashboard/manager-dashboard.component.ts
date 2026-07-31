@@ -107,11 +107,7 @@ interface ConsumptionPrompt {
         The substance of the page. The tiles above are counts of this list, so it carries no
         summary of its own.
       -->
-      <pb-dashboard-section
-        title="Items to restock"
-        icon="inventory"
-        [hint]="restockHint()"
-      >
+      <pb-dashboard-section title="Items to restock" icon="inventory" [hint]="restockHint()">
         <pb-low-stock-panel [items]="data().lowStock.items" />
       </pb-dashboard-section>
     </div>

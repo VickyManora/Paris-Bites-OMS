@@ -336,13 +336,16 @@ html {
   --color-pb-border: var(--pb-neutral-200);
   --color-pb-border-strong: var(--pb-neutral-300);
 
-  --color-pb-primary: var(--pb-brown-800);
-  --color-pb-primary-hover: var(--pb-brown-600);
-  --color-pb-primary-pressed: var(--pb-brown-900);
+  /* The same pink steps as the root, restated because this scope pins light values inside a POS
+   * surface regardless of the page theme — leaving them brown here was the one place the old
+   * primary survived the repoint, and it showed on Material controls inside the payment sheet. */
+  --color-pb-primary: var(--pb-pink-700);
+  --color-pb-primary-hover: var(--pb-pink-600);
+  --color-pb-primary-pressed: var(--pb-pink-800);
   --color-pb-on-primary: var(--pb-neutral-0);
-  --color-pb-primary-tint: var(--pb-brown-50);
-  --color-pb-primary-tint-strong: var(--pb-brown-100);
-  --color-pb-primary-tint-border: var(--pb-brown-200);
+  --color-pb-primary-tint: var(--pb-pink-50);
+  --color-pb-primary-tint-strong: var(--pb-pink-100);
+  --color-pb-primary-tint-border: var(--pb-pink-200);
 
   --color-pb-gold-fg: var(--pb-gold-600);
   --color-pb-link: var(--pb-pink-700);
@@ -379,7 +382,7 @@ html {
   --mat-sys-on-surface-variant: var(--pb-neutral-600);
   --mat-sys-outline-variant: var(--pb-neutral-200);
   --mat-sys-outline: var(--pb-neutral-300);
-  --mat-sys-primary: var(--pb-brown-800);
+  --mat-sys-primary: var(--pb-pink-700);
   --mat-sys-on-primary: var(--pb-neutral-0);
 }
 
@@ -513,10 +516,18 @@ body {
 // the `hover:` and `group-hover:` classes on the same elements regardless of specificity. That is
 // what stops the current item flickering to the hover tint as the cursor crosses it.
 //
-// Brown, not pink: the current section is the definition of a *committed* state,
-// and it is the brief's "Navigation" and "Selected Items" in one element. The
-// pink hover wash still plays underneath it as the cursor passes, so the two
-// read as what they are — where you are, and where you might go.
+// Pink, and the same family as the hover wash — which used to be the argument against it.
+//
+// This was deliberately brown so that "where you are" and "where you might go" were different
+// *hues*. With the brand pink now the primary, both are pink: hover is `pink-50` and current is
+// `pink-100`, one step apart and a 1.13:1 difference. On tint alone that would be too close.
+//
+// It is not on tint alone, and that is why the change is safe rather than a regression. Being the
+// current section is carried five ways here: the stronger tint, full-strength text colour, weight
+// 550, a *filled* icon via the font's FILL axis, and the indicator bar at full opacity and length.
+// The pill also darkens another step on hover, so the current item still responds to the pointer
+// instead of looking inert. Anyone who cannot separate two pink washes still has four signals left,
+// which is the same reason the fill was made redundant with the tint in the first place.
 .pb-nav-active {
   background-color: var(--color-pb-primary-tint-strong);
   color: var(--color-pb-text);

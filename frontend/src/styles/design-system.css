@@ -132,41 +132,55 @@
   --pb-border-width: 1px;
 
   /* ===================================================================
-   * PRIMARY — chocolate brown, and the discipline around it
+   * PRIMARY — the brand pink, and the discipline around it
    *
-   * `#5a3a2e` — the site's own deep brown — is 10.1:1 on white, which makes it the heaviest mark
-   * this system can put on a page. Heavy is correct for a committed state and wrong for everything
-   * else, so the list is treated as exhaustive rather than illustrative:
+   * **This was chocolate brown and is now pink.** The shop's identity is pink; the brown was borrowed
+   * from a few of the customer site's component styles and, used as this app's primary, it made the
+   * console look like a different product from the shop. The whole change is these seven lines,
+   * because nothing below this layer names a colour — which is the entire reason the palette is
+   * split into primitives and semantics.
    *
-   *   ✓ text and outlined button labels   ✓ navigation   ✓ selected items   ✓ dark fills
+   * Pink cannot simply take brown's place at the same step, and that is the interesting part. The
+   * site's own pink is `#f8b4c3` at **1.7:1** — a tint, not a mark. So the roles land at different
+   * rungs of the same ramp, each chosen by measurement:
+   *
+   *   `pink-700` #af1855  6.8:1 on white, 6.4:1 on cream — the mark, and white text sits on it
+   *   `pink-600` #cb2f68  5.1:1 — the hover step, *lighter*, still legal as a label
+   *   `pink-800` #8f1044  9.0:1 — pressed, darker
+   *
+   * The discipline that applied to brown applies unchanged, and matters more now, because pink is
+   * more tempting to sprinkle:
+   *
+   *   ✓ text and outlined button labels   ✓ navigation   ✓ selected items   ✓ brand fills
    *   ✗ headings   ✗ card borders   ✗ icons   ✗ table headers   ✗ anything decorative
    *
-   * The rejected list is the load-bearing half. Brown headings on cream cards is precisely the
-   * "generic ERP" the redesign is escaping, and it comes back the moment brown is available as a
-   * general-purpose dark colour. Headings use `--color-pb-text`, which is the site's near-black and
-   * lets the brown mean something when it does appear.
+   * The rejected list is the load-bearing half. Pink headings on cream cards is a themed template,
+   * exactly as brown headings were a generic ERP. Headings use `--color-pb-text` — the site's
+   * near-black — so the pink means something wherever it does appear.
    *
-   * **The filled primary button is no longer this colour.** It wears the site's pink-to-caramel
-   * gradient — see `pb-gradient-brand` below and the Material rule in `styles.scss`. What this token
-   * still paints is everything else Material resolves from the primary role: the *label* of a text
-   * or outlined button, a checkbox, a radio, a slider, a tab indicator, a progress bar. Those are
-   * marks and labels rather than fills, which is why they need the 10.1:1 and the button does not.
+   * **The filled primary button is not this colour.** It wears the site's pink-to-caramel gradient —
+   * see `pb-gradient-brand`. What this token paints is everything else Material resolves from the
+   * primary role: the *label* of a text or outlined button, a checkbox, a radio, a slider, a tab
+   * indicator, a progress bar. Marks and labels, which is why they need the 6.8:1.
    *
-   * **Hover goes lighter, not darker.** Darkening a colour this deep produces a state change nobody
-   * can see. Lifting to `brown-600` (8.2:1) is visible, and it matches how a light button dims on
-   * hover — both move *toward* the middle.
+   * **Hover goes lighter, not darker** — unchanged reasoning: darkening a deep colour is a state
+   * change nobody sees, and lifting matches how a light button dims.
    * =================================================================== */
 
-  --color-pb-primary: var(--pb-brown-800);
-  --color-pb-primary-hover: var(--pb-brown-600);
-  --color-pb-primary-pressed: var(--pb-brown-900);
-  --color-pb-on-primary: var(--pb-sand-0); /*   white on brown — 10.1:1 */
+  --color-pb-primary: var(--pb-pink-700);
+  --color-pb-primary-hover: var(--pb-pink-600);
+  --color-pb-primary-pressed: var(--pb-pink-800);
+  --color-pb-on-primary: var(--pb-sand-0); /*   white on pink-700 — 6.8:1 */
 
-  /* The brown as a *tint*: a selected row, the active nav pill. Flat steps from the ramp rather than
-   * a `color-mix` at the call site, so every selected thing in the app is the same beige. */
-  --color-pb-primary-tint: var(--pb-brown-50);
-  --color-pb-primary-tint-strong: var(--pb-brown-100);
-  --color-pb-primary-tint-border: var(--pb-brown-200);
+  /* The pink as a *tint*: a selected row, the active nav pill. Flat steps from the ramp rather than a
+   * `color-mix` at the call site, so every selected thing in the app is the same pink.
+   *
+   * `tint` is the same step as `--color-pb-hover-surface` on purpose — hover and selected are then
+   * one family, and what separates them is `tint-strong` plus the four non-colour signals on
+   * `.pb-nav-active`. See the note there. */
+  --color-pb-primary-tint: var(--pb-pink-50);
+  --color-pb-primary-tint-strong: var(--pb-pink-100);
+  --color-pb-primary-tint-border: var(--pb-pink-200);
 
   /* ===================================================================
    * GOLD — premium, revenue, highlight
@@ -565,17 +579,22 @@
   --color-pb-border: var(--pb-ink-600);
   --color-pb-border-strong: var(--pb-ink-500);
 
-  /* The inversion. Cream fill, brown text on it — the brand, upside down. */
-  --color-pb-primary: var(--pb-cream);
-  --color-pb-primary-hover: var(--pb-cream-dim);
-  --color-pb-primary-pressed: var(--pb-brown-200);
-  --color-pb-on-primary: var(--pb-brown-900);
+  /* The inversion, now in pink. Light pink fill, deep pink text on it — the brand, upside down.
+   *
+   * Same reason as before: `pink-700` on the dark page is **2.9:1**, so a pink button in dark mode
+   * would be a button-shaped hole. `pink-300` is 10:1 there, and `pink-900` on it is 6.2:1, so the
+   * pairing is legible in both directions and still unmistakably the brand rather than a white pill. */
+  --color-pb-primary: var(--pb-pink-300);
+  --color-pb-primary-hover: var(--pb-pink-200);
+  --color-pb-primary-pressed: var(--pb-pink-400);
+  --color-pb-on-primary: var(--pb-pink-900);
 
   /* Tints become washes of the *light* primary at low alpha — a dark tint of a light colour is the
-   * only way to keep "selected" reading as selected on a near-black card. */
-  --color-pb-primary-tint: rgb(237 215 194 / 0.08);
-  --color-pb-primary-tint-strong: rgb(237 215 194 / 0.14);
-  --color-pb-primary-tint-border: rgb(237 215 194 / 0.24);
+   * only way to keep "selected" reading as selected on a near-black card. `247 161 181` is
+   * `--pb-pink-300`, written out because `rgb()` cannot take a hex custom property as its channels. */
+  --color-pb-primary-tint: rgb(247 161 181 / 0.08);
+  --color-pb-primary-tint-strong: rgb(247 161 181 / 0.14);
+  --color-pb-primary-tint-border: rgb(247 161 181 / 0.24);
 
   /* Gold needs no substitution on dark — `#c89b5b` is 6.4:1 on `#131318`, so the brand gold is
    * finally legal as text. This is the one token that gets *brighter* in dark mode. */
@@ -1154,7 +1173,7 @@
   place-items: center;
   flex: none;
   border-radius: var(--radius-pb-md);
-  background-image: linear-gradient(145deg, var(--pb-brown-700), var(--pb-brown-800));
+  background-image: linear-gradient(145deg, var(--pb-pink-700), var(--pb-pink-800));
   color: var(--pb-gold-400);
   font-size: var(--text-pb-overline);
   font-weight: 700;

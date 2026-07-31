@@ -7,6 +7,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import type { PbIconName } from '../../../shared/components/icon/icon-registry';
 import { MATERIAL_LAYOUT_IMPORTS } from '../../../shared/material/material-imports';
 import { InitialsPipe } from '../../../shared/pipes/initials.pipe';
+import { NgTemplateOutlet } from '@angular/common';
 
 /** One entry in the navigation tree. */
 export interface NavItem {
@@ -241,7 +242,14 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 @Component({
   selector: 'pb-app-sidebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive, IconComponent, InitialsPipe, ...MATERIAL_LAYOUT_IMPORTS],
+  imports: [
+    NgTemplateOutlet,
+    RouterLink,
+    RouterLinkActive,
+    IconComponent,
+    InitialsPipe,
+    ...MATERIAL_LAYOUT_IMPORTS,
+  ],
   host: {
     // 'group' so the collapse control can appear on hover of the whole panel rather than
     // permanently occupying the brand row — see the note on `collapseButtonClass`.
@@ -285,7 +293,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
             class="pb-brand-mark h-8 w-8 transition-opacity duration-pb-fast ease-pb-out group-hover:opacity-0 group-focus-visible:opacity-0"
             aria-hidden="true"
           >
-            PB
+            <ng-container [ngTemplateOutlet]="brandTower" />
           </span>
           <pb-icon
             name="expand"
@@ -305,7 +313,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
             class="pb-brand-mark h-8 w-8 transition-transform duration-pb-base ease-pb-spring group-hover:scale-105 motion-reduce:transition-none"
             aria-hidden="true"
           >
-            PB
+            <ng-container [ngTemplateOutlet]="brandTower" />
           </span>
           <span class="pb-slide-in-x min-w-0">
             <span class="block truncate text-pb-subtitle font-semibold text-pb-text">
@@ -479,6 +487,27 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         }
       }
     </div>
+
+    <!--
+      The brand mark's Eiffel tower, the same drawing as the tab icon.
+
+      'currentColor' so it inherits the gold the 'pb-brand-mark' utility sets, and no background rect
+      — the utility supplies the pink gradient the tower sits on. Strokes rather than a filled
+      silhouette for the reason given in 'favicon.svg': a shape that tapers to a point at the spire
+      cannot survive being rasterised at this size, and a round-capped stroke keeps a minimum width
+      however far down it scales.
+    -->
+    <ng-template #brandTower>
+      <svg viewBox="0 0 64 64" class="h-5 w-5" fill="none" stroke="currentColor" aria-hidden="true">
+        <g stroke-linecap="round">
+          <path d="M10.5 53.5C21.5 45.5 27.5 33 30.6 13" stroke-width="4" />
+          <path d="M53.5 53.5C42.5 45.5 36.5 33 33.4 13" stroke-width="4" />
+          <path d="M17 36H47" stroke-width="3.8" />
+          <path d="M23.5 24.5H40.5" stroke-width="3.2" />
+          <path d="M32 5V13" stroke-width="3" />
+        </g>
+      </svg>
+    </ng-template>
   `,
 })
 export class AppSidebarComponent {

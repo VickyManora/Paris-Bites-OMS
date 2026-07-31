@@ -57,13 +57,17 @@ describe('waffle-packaging', () => {
 
     it('finds it wherever the menu files it', () => {
       // Which category holds it is presentation. A reorganised menu must not switch the charge off.
-      const moved = [category('c-waf', 'Belgian Waffles', [product('p-box', 'Waffle Packaging', 10)])];
+      const moved = [
+        category('c-waf', 'Belgian Waffles', [product('p-box', 'Waffle Packaging', 10)]),
+      ];
       expect(findPackagingProduct(moved)?.id).toBe('p-box');
     });
 
     it('returns null when it is sold out', () => {
       // No boxes left means nothing to offer, so the prompt must not appear at all.
-      const soldOut = [category('c-ext', 'Extras', [product('p-box', 'Waffle Packaging', 10, false)])];
+      const soldOut = [
+        category('c-ext', 'Extras', [product('p-box', 'Waffle Packaging', 10, false)]),
+      ];
       expect(findPackagingProduct(soldOut)).toBeNull();
     });
 

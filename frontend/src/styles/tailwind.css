@@ -38,11 +38,20 @@
  *
  * **`--color-pos-vanilla` is now white, not cream.** It was `#fff8f2`, and as the POS surface colour
  * it was the single largest area of beige in the application — the brief's complaint, rendered at
- * full screen on the till. The rest of the identity is unchanged: chocolate and gold are the same
- * hexes they always were, now sourced from the ramp so there is one definition of each.
+ * full screen on the till.
+ *
+ * **`--color-pos-brown` is no longer brown.** The name is kept and the value is `pink-800`, which
+ * reads as a deep rose. Renaming the token would mean touching 54 call sites across four POS files
+ * to change one decision, and the whole point of a token is that the decision lives in one place —
+ * so the honest fix is this comment. It is the POS's *ink*: price figures, headings on the white
+ * till surface, and the fill of the New order button, which is why it needs a high step rather than
+ * the brand pink itself. `#8f1044` is 9.0:1 on white in both directions — the same weight brown had
+ * at 10.1:1, so nothing on the till gets harder to read at arm's length.
+ *
+ * Gold is untouched. It pairs with pink exactly as it did with brown — it is the logo's own pairing.
  */
 @theme {
-  --color-pos-brown: var(--pb-brown-800);
+  --color-pos-brown: var(--pb-pink-800);
   --color-pos-gold: var(--pb-gold-400);
   --color-pos-pink: var(--pb-pink-100);
   --color-pos-vanilla: var(--pb-neutral-0);

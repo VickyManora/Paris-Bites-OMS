@@ -254,15 +254,22 @@ export interface PaymentSheetData {
 
               One amount field per method, and a running Remaining underneath.
 
-              The cashier types what the customer handed over in each form, and the field they have
-              not filled tells them what is left. That is the whole interaction: no running total to
-              read, no arithmetic to do at the counter with a queue.
+              **The cashier keys one amount and the other field fills itself with the rest.** A
+              two-tender split has exactly one degree of freedom — once you know the cash, the UPI
+              is not a second decision, it is arithmetic — so asking for both is asking the person
+              at the counter to do a subtraction the screen has already done. Either field can be
+              the one they type in, and typing in the other moves the split point rather than
+              fighting the fill: see setAmount() below.
 
               **Remaining is computed in paise**, like the server's own check — 0.1 + 0.2 is not 0.3,
               and a Remaining that reads ₹0.00 while the confirm button stays disabled because the
               float is 0.0000001 out is the worst possible version of this screen.
             -->
             <div class="flex flex-col gap-pb-3">
+              <p class="m-0 text-pb-caption text-pos-brown/70">
+                Enter one amount — the other fills in with the rest.
+              </p>
+
               @for (option of methods; track option.value) {
                 <div class="rounded-pb-lg border border-pos-gold/40 bg-pos-vanilla p-pb-3">
                   <div class="flex items-center gap-pb-3">
@@ -306,31 +313,6 @@ export interface PaymentSheetData {
                       />
                     </div>
                   </div>
-
-                  <!--
-                    The one-tap shortcut for the commonest split there is: the customer pays part in
-                    cash and the rest goes on the other method. Filling the remainder by hand means
-                    reading a figure off the screen and typing it back in, which is where a
-                    transposed digit comes from.
-                  -->
-                  <!--
-                    Only once part of the bill is already keyed.
-
-                    Before that, "put the remaining ₹447 here" is on *both* rows and offers to pay
-                    the whole thing by one method — which is not a split, it is what the two buttons
-                    on the previous screen are for. Showing it then also cost two rows of height and
-                    pushed Remaining, the one figure the cashier is watching, below the fold.
-                  -->
-                  @if (partiallyPaid() && remaining() > 0 && amountFor(option.value).length === 0) {
-                    <button
-                      type="button"
-                      class="mt-pb-2 cursor-pointer appearance-none rounded-pb-md border-0 bg-transparent p-0 text-pb-caption font-semibold text-pos-brown underline underline-offset-2"
-                      [disabled]="busy()"
-                      (click)="fillRemaining(option.value)"
-                    >
-                      Put the remaining {{ fmt(remaining()) }} here
-                    </button>
-                  }
                 </div>
               }
 
@@ -511,8 +493,13 @@ export class PaymentSheetComponent {
    * Held as **strings, not numbers**, and that is deliberate: a cashier midway through typing "2"
    * of "247" has a valid partial entry, and parsing to a number on every keystroke would rewrite
    * their field — "2." becomes 2 and the decimal point they just pressed disappears. The strings
-   * are parsed when the total is computed and again on submit; the field itself is never
-   * reformatted underneath them.
+   * are parsed when the total is computed and again on submit; the field they are typing in is
+   * never reformatted underneath them.
+   *
+   * The *other* field is written here too, by `setAmount`, holding the balance of the bill. One map
+   * for both rather than a separate "derived" value, because from every other point in this
+   * component — Remaining, the confirm gate, the tenders sent to the server — a filled-in amount and
+   * a keyed one are the same thing, and the cashier can overtype either.
    */
   private readonly amounts = signal<Readonly<Record<string, string>>>({});
 
@@ -557,29 +544,73 @@ export class PaymentSheetComponent {
   }
 
   /**
-   * Accepts a keystroke into one amount field.
+   * Accepts a keystroke into one amount field, and puts the rest of the bill in the other.
    *
    * Filters to digits and a single decimal point rather than rejecting the whole entry: a cashier
    * who fat-fingers a letter should lose that character, not their field. Capped at two decimal
    * places, matching what the column stores and what the server will accept.
+   *
+   * **The counterpart is rewritten on every keystroke, unconditionally.** Two tenders that have to
+   * sum to the bill leave nothing to preserve in the other field — a value that no longer adds up
+   * is not the cashier's earlier intent worth keeping, it is a stale subtraction. That also makes
+   * the fill work in both directions with no notion of which field is "the" input: keying ₹300
+   * against cash puts ₹200 on UPI, and then correcting UPI to ₹150 puts ₹350 back on cash. The
+   * split balances after a single entry, so the confirm button is live immediately.
+   *
+   * The counterpart does run through the intermediate values while a figure is still being typed —
+   * ₹3 of ₹300 briefly reads as ₹497 on the other row. It is the same field they are about to
+   * stop touching, and every keystroke leaves it correct for what is actually keyed, which is the
+   * property that matters when the last keystroke is the one that stands.
    */
   protected setAmount(method: PaymentMethod, raw: string): void {
     const cleaned = raw.replace(/[^\d.]/g, '');
     const [whole = '', ...rest] = cleaned.split('.');
     const value = rest.length === 0 ? whole : `${whole}.${rest.join('').slice(0, 2)}`;
 
-    this.amounts.update((current) => ({ ...current, [method]: value }));
+    const other = this.counterpart(method);
+
+    this.amounts.update((current) =>
+      other === null
+        ? { ...current, [method]: value }
+        : { ...current, [method]: value, [other]: this.restOfBill(value) },
+    );
   }
 
-  /** Drops the outstanding balance into one method, for the commonest two-tender split. */
-  protected fillRemaining(method: PaymentMethod): void {
-    const outstanding = this.remaining();
+  /**
+   * The method that carries whatever `method` does not, or `null` if that is not a single method.
+   *
+   * The counter takes cash and UPI, so there is always exactly one — but the panel is built from
+   * `PAYMENT_METHODS`, and the day a third tender is offered "the rest" stops being one field.
+   * Returning null then leaves both fields as plain manual entry, with Remaining doing the telling,
+   * rather than silently dropping the balance on whichever method happened to be listed next.
+   */
+  private counterpart(method: PaymentMethod): PaymentMethod | null {
+    const [only, ...others] = this.methods.filter((option) => option.value !== method);
 
-    if (outstanding <= 0) {
-      return;
+    return only !== undefined && others.length === 0 ? only.value : null;
+  }
+
+  /**
+   * What is left of the bill once `keyed` is taken off it, as a field value.
+   *
+   * Blank rather than "0.00" when nothing is left, and blank when the entry is over the bill: a
+   * cleared cash field has to clear the UPI field with it, because leaving the whole total sitting
+   * on one method is not a split — it is the single-method path, which is what the two buttons on
+   * the previous screen are for. Over-tendering keeps the entry and lets Remaining say "Over by".
+   *
+   * Subtracted in paise for the same reason `remaining` is: this value is what the confirm button
+   * ends up gating on, and it has to hit zero exactly.
+   */
+  private restOfBill(keyed: string): string {
+    const parsed = Number.parseFloat(keyed);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return '';
     }
 
-    this.amounts.update((current) => ({ ...current, [method]: outstanding.toFixed(2) }));
+    const rest = (toPaise(this.data.total) - toPaise(parsed)) / PAISE;
+
+    return rest > 0 ? rest.toFixed(2) : '';
   }
 
   /** The paise keyed so far, across every method. */
@@ -602,9 +633,6 @@ export class PaymentSheetComponent {
   );
 
   protected readonly absRemaining = computed(() => Math.abs(this.remaining()));
-
-  /** Whether any amount has been keyed yet — what makes "put the rest here" meaningful. */
-  protected readonly partiallyPaid = computed(() => this.tenderedPaise() > 0);
 
   /** True the moment the keyed amounts balance the bill exactly. */
   protected readonly splitBalances = computed(

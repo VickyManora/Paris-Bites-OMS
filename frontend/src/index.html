@@ -85,9 +85,132 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
       rel="stylesheet"
     />
+    <!--
+      Start-up screen.
+
+      Inlined here, not in a component, because it has to be on screen during the window when no
+      component can be: the bundle is still downloading, and after that `provideAppInitializer`
+      blocks the first render until the session has been restored. That initializer makes an API
+      call, so on a cold API the blank page lasts as long as the API takes to answer — and the API
+      sleeps after fifteen idle minutes, which is most mornings.
+
+      The escalating lines are pure CSS `animation-delay`, with no script: the point is to work
+      before any JavaScript of ours has run, and a plain stylesheet cannot be blocked by a future
+      content-security-policy the way an inline script can.
+
+      Colours are literals rather than design-system tokens for the same reason — the stylesheet
+      that defines those tokens is one of the things still loading. They are the same values, and
+      `prefers-color-scheme` is the only theme signal available before `ThemeService` runs.
+
+      Angular removes everything inside <pb-root> when it renders, so there is nothing to tear
+      down and no way for this to outlive the boot.
+    -->
+    <style>
+      .pb-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        text-align: center;
+        font-family: Poppins, Inter, system-ui, -apple-system, sans-serif;
+        background-color: #fdf2f4;
+        background-image: radial-gradient(115% 85% at 8% 0%, #faf8f5 0%, transparent 58%);
+        color: #4a4a4a;
+      }
+
+      .pb-boot__logo {
+        width: min(15rem, 66vw);
+        height: auto;
+      }
+
+      .pb-boot__spinner {
+        width: 1.75rem;
+        height: 1.75rem;
+        border: 2px solid rgb(212 165 116 / 0.35);
+        border-top-color: #b8894a;
+        border-radius: 50%;
+        animation: pb-boot-spin 0.8s linear infinite;
+      }
+
+      /* Each line fades in only if boot is still going when its delay elapses. */
+      .pb-boot__note {
+        margin: 0;
+        max-width: 22rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        opacity: 0;
+        animation: pb-boot-fade 0.4s ease forwards;
+      }
+
+      .pb-boot__note--slow {
+        animation-delay: 4s;
+      }
+
+      .pb-boot__note--cold {
+        font-size: 0.8125rem;
+        color: #78634e;
+        animation-delay: 12s;
+      }
+
+      @keyframes pb-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes pb-boot-fade {
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* A spinner that cannot spin still has to say something, so only motion is dropped. */
+      @media (prefers-reduced-motion: reduce) {
+        .pb-boot__spinner {
+          animation: none;
+          border-top-color: #b8894a;
+        }
+
+        .pb-boot__note {
+          animation-duration: 0.01ms;
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .pb-boot {
+          background-color: #1a1411;
+          background-image: radial-gradient(115% 85% at 8% 0%, #2c2119 0%, transparent 58%);
+          color: #ded9d4;
+        }
+
+        .pb-boot__note--cold {
+          color: #d9b98f;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <pb-root></pb-root>
+    <pb-root>
+      <div class="pb-boot" role="status" aria-live="polite">
+        <img
+          class="pb-boot__logo"
+          src="brand/paris-bites-logo.webp"
+          alt="Paris Bites"
+          width="720"
+          height="469"
+        />
+        <div class="pb-boot__spinner" aria-hidden="true"></div>
+        <p class="pb-boot__note pb-boot__note--slow">Starting up…</p>
+        <p class="pb-boot__note pb-boot__note--cold">
+          The server sleeps when it has not been used for a while. Waking it can take up to a
+          minute — this only happens on the first visit of the day.
+        </p>
+      </div>
+    </pb-root>
   </body>
 </html>

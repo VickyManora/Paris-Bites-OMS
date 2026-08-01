@@ -34,7 +34,26 @@ export const environment: AppEnvironment = {
   /** Warn level and above — debug logging would leak internals to the console. */
   logLevel: 'warn',
   enableDevTools: false,
-  requestTimeoutMs: 30_000,
+  /*
+   * Longer than it looks like it should be, and 30s — the obvious number, and what this was —
+   * is the one value guaranteed to break.
+   *
+   * The API runs on an instance that sleeps after fifteen idle minutes and takes tens of seconds
+   * to come back. A 30s ceiling expires *while the server is still starting*, so the first request
+   * of the day fails, and it fails after half a minute of waiting. The second attempt then works,
+   * because the first one woke the machine — which is exactly the "it only breaks once, then it's
+   * fine" report that is so easy to dismiss.
+   *
+   * This budget is a deadline for giving up, not an expected duration: a warm request answers in
+   * well under a second, so raising the ceiling costs nothing on any healthy call. What it buys is
+   * the ability to actually finish the one call that is slow for a known, temporary reason.
+   *
+   * The wait is not silent — `LoadingService` says what is happening at 4s and names the waking
+   * server at 12s.
+   *
+   * The real fix is for the API not to sleep. Until then, this.
+   */
+  requestTimeoutMs: 65_000,
   /** Retry idempotent requests that fail on transient network/5xx errors. */
   httpRetryCount: 2,
 };

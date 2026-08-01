@@ -1,5 +1,5 @@
 import { HttpErrorResponse, type HttpInterceptorFn } from '@angular/common/http';
-import { retry, throwError, TimeoutError, timer } from 'rxjs';
+import { retry, throwError, timer } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 
 /** Status codes worth retrying: transport failure, or a server saying "later". */
@@ -31,16 +31,21 @@ export const retryInterceptor: HttpInterceptorFn = (req, next) => {
       count: maxRetries,
       delay: (error: unknown, retryCount: number) => {
         /*
-         * A timeout counts.
+         * A timeout does **not** count, and used to.
          *
-         * `timeoutInterceptor` sits below this one, so a request that outran its deadline
-         * arrives here as an rxjs `TimeoutError` rather than a response. On a slow mobile
-         * connection that is the *typical* transient failure, and excluding it would leave
-         * retry handling covering only the cases that barely happen.
+         * `timeoutInterceptor` sits below this one, so a request that outran its deadline arrives
+         * here as an rxjs `TimeoutError`. Retrying that made sense while the deadline was 30s and
+         * the common cause was a sleeping API: the budget was too small for a cold start, so a
+         * second attempt genuinely rescued it.
+         *
+         * `requestTimeoutMs` is now 65s precisely so the cold start fits inside one attempt. With
+         * that budget a timeout no longer means "unlucky", it means the server did not answer in
+         * over a minute — and retrying twice more would make the user wait three of those, over
+         * three minutes, before being told. Transport failures still retry: they arrive as status
+         * 0 and fail fast, which is what backoff is for.
          */
         const isRetryable =
-          error instanceof TimeoutError ||
-          (error instanceof HttpErrorResponse && RETRYABLE_STATUSES.includes(error.status));
+          error instanceof HttpErrorResponse && RETRYABLE_STATUSES.includes(error.status);
 
         if (!isRetryable) {
           return throwError(() => error);

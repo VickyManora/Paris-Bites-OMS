@@ -56,8 +56,16 @@ export const permissionGuard: CanActivateFn = (route) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
-  // Unauthenticated: defer to `authGuard` so the return URL is preserved.
-  if (!auth.isAuthenticated()) {
+  /*
+   * Unauthenticated: defer to `authGuard` so the return URL is preserved.
+   *
+   * "Signed in *or restoring*" for the reason `authGuard` gives at length: on a cold start the
+   * session is still arriving, and treating that as signed out sends a cashier to a login form
+   * whose submit button needs the same sleeping API. While restoring, the permission checks below
+   * read the last known permissions — see `sessionHint` — so this guard answers the same way it
+   * would have a moment ago, and the server re-authorises everything regardless.
+   */
+  if (!auth.isSignedInOrRestoring()) {
     return router.createUrlTree([AppRoutes.login]);
   }
 
@@ -82,7 +90,7 @@ export function requirePermission(...permissions: readonly Permission[]): CanAct
     const auth = inject(AuthService);
     const router = inject(Router);
 
-    if (!auth.isAuthenticated()) {
+    if (!auth.isSignedInOrRestoring()) {
       return router.createUrlTree([AppRoutes.login]);
     }
 

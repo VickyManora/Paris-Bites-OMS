@@ -22,6 +22,7 @@ import { environment } from '../environments/environment';
 import { routes } from './app.routes';
 import { AuthService } from './core/auth/services/auth.service';
 import { HTTP_INTERCEPTORS_CHAIN } from './core/http/interceptors/index';
+import { ApiWakeService } from './core/services/api-wake.service';
 import { ThemeService } from './core/services/theme.service';
 
 /**
@@ -90,18 +91,37 @@ export const appConfig: ApplicationConfig = {
     }),
 
     /**
-     * Restores the session before the first route resolves.
+     * Starts the session restore and the API wake-up — and waits for neither.
      *
-     * Without this, guards would run against empty auth state on a page reload
-     * and bounce an authenticated user to the login screen.
+     * ## Why this used to block, and why it must not
+     *
+     * It returned the `restoreSession()` promise, so Angular held the first route until
+     * `/auth/refresh` came back. That was right when the API was always up: guards then never ran
+     * against empty auth state, and nobody saw a flash of the login page on reload.
+     *
+     * It is wrong now that the API sleeps. On the free tier a service idle for fifteen minutes is
+     * stopped and takes about a minute to restart, and blocking here spent that entire minute on a
+     * blank page — the app had rendered nothing at all, because the initializer had not resolved.
+     * A cashier opening the tab with a customer in front of them saw white, then a login form.
+     *
+     * Now: the refresh is fired and forgotten, the app paints immediately, `authGuard` holds the
+     * door while `isInitialising()` is true, and the POS draws its menu from cache. The cold start
+     * still costs a minute — it just costs it in the background, while the counter is usable.
+     *
+     * `ApiWakeService.start()` pings the API at the same moment for the same reason: the sooner the
+     * request that triggers the start-up goes out, the sooner everything else works. It also
+     * re-pings when a hidden tab becomes visible, which is the case this whole design is aimed at —
+     * the shop opens, someone brings the tab back up, and the wait starts before the first tap
+     * rather than after it.
      */
     provideAppInitializer(() => {
       const auth = inject(AuthService);
       // Instantiate eagerly so the theme is applied before first paint,
       // avoiding a flash of the wrong colour scheme.
       inject(ThemeService);
+      inject(ApiWakeService).start();
 
-      return firstValueFrom(auth.restoreSession());
+      void firstValueFrom(auth.restoreSession());
     }),
 
     /** App-wide Material defaults, so no component repeats them. */

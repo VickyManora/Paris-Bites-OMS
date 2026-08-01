@@ -35,6 +35,7 @@ import type { MenuCategory, Product } from '../../models/pos.model';
 import { UPI_QR_SRC } from '../../models/upi-qr';
 import { findPackagingProduct, waffleProductIds } from '../../models/waffle-packaging';
 import { PosCartStore } from '../../services/pos-cart-store.service';
+import { PosMenuCacheService } from '../../services/pos-menu-cache.service';
 import { PosService } from '../../services/pos.service';
 
 /** Below this the cart becomes a slide-up sheet. Matches the tablet breakpoint at 768px. */
@@ -164,6 +165,29 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
             }
           </mat-form-field>
         </div>
+
+        <!--
+          Says where the menu on screen came from, and only while that is not the API.
+
+          The counter can be used before the server is awake because the last known menu is cached
+          (see 'PosMenuCacheService'). What makes that honest rather than merely convenient is this
+          line: the cashier is told the prices are the last ones this browser saw, and that the
+          total on the order will be the server's own. It disappears by itself the moment the fetch
+          lands, which is also the signal that the API is back.
+        -->
+        @if (menuFromCacheAt(); as syncedAt) {
+          <div
+            class="pb-tone-warning mb-3 flex items-center gap-3 rounded-xl border p-3"
+            role="status"
+            aria-live="polite"
+          >
+            <mat-icon class="shrink-0" aria-hidden="true">cloud_sync</mat-icon>
+            <p class="text-pb-caption m-0">
+              <span class="font-semibold">Menu from {{ syncedLabel(syncedAt) }}.</span>
+              Keep taking orders — the server sets the final total when the order is saved.
+            </p>
+          </div>
+        }
 
         @if (loading()) {
           <div class="flex flex-1 items-center justify-center py-16">
@@ -649,6 +673,7 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
 export class NewOrderPage implements OnInit {
   protected readonly cart = inject(PosCartStore);
   private readonly service = inject(PosService);
+  private readonly cache = inject(PosMenuCacheService);
   private readonly dialog = inject(MatDialog);
   private readonly confirm = inject(ConfirmDialogService);
   private readonly router = inject(Router);
@@ -670,6 +695,15 @@ export class NewOrderPage implements OnInit {
   protected readonly loading = signal(true);
   /** The message from a failed menu load, or `null`. Drives the retry state. */
   protected readonly menuError = signal<string | null>(null);
+
+  /**
+   * When the menu on screen was last confirmed by the API, or `null` while it is live.
+   *
+   * Non-null means the grid is being drawn from `PosMenuCacheService` — the cashier is looking at
+   * the last menu this browser saw, not at what the server says now. The banner keyed on this is
+   * the whole reason caching the menu is honest rather than merely convenient.
+   */
+  protected readonly menuFromCacheAt = signal<Date | null>(null);
   protected readonly saving = signal(false);
   /** The message from a failed order submission, shown inside the payment sheet. */
   protected readonly submitError = signal<string | null>(null);
@@ -767,34 +801,91 @@ export class NewOrderPage implements OnInit {
    * POS is broken.
    */
   protected loadMenu(): void {
-    this.loading.set(true);
+    /*
+     * The cache is painted first, and that is the whole point of this screen's boot.
+     *
+     * The API sleeps after fifteen idle minutes and takes about a minute to come back (see
+     * `ApiWakeService`). Waiting for it meant a spinner between the cashier and the customer for
+     * that whole minute. Now the last known menu is on screen in the time it takes to read
+     * localStorage, the cart works — it is local — and the fetch below quietly replaces the grid
+     * when the server answers.
+     *
+     * `loading` is only true when there is nothing to show. A spinner over a usable screen is a
+     * spinner that stops the person using it.
+     */
+    const cached = this.cache.read();
+
+    if (cached !== null && this.menu().length === 0) {
+      this.applyMenu(cached.menu);
+      this.menuFromCacheAt.set(cached.savedAt);
+      this.loading.set(false);
+    } else {
+      this.loading.set(this.menu().length === 0);
+    }
+
     this.menuError.set(null);
 
     this.service.menu(true).subscribe({
       next: (menu) => {
-        this.menu.set(menu);
+        this.cache.write(menu);
+        this.menuFromCacheAt.set(null);
+        this.applyMenu(menu);
 
-        /*
-         * Hand the cart a way to look up a product's tier.
-         *
-         * The combo preview needs it and the cart deliberately does not hold the catalogue — this
-         * is the one place that knows both. Built once per load rather than per keystroke.
-         */
-        const tierByProduct = new Map<string, string>();
-        for (const category of menu) {
-          for (const product of category.products) {
-            tierByProduct.set(product.id, category.name);
-          }
-        }
-        this.cart.setCategoryResolver((productId) => tierByProduct.get(productId));
         this.loading.set(false);
         this.focusSearch();
       },
       error: (error: AppError) => {
         this.loading.set(false);
-        this.menuError.set(error.message);
+
+        /*
+         * A failed refresh over a usable cached menu is not an error state.
+         *
+         * Replacing a working order screen with "Could not load the menu" because the *second*
+         * fetch failed would take the counter offline to report that it is offline. The banner
+         * already says the menu is from cache; the error panel is for having nothing to show.
+         */
+        if (this.menu().length === 0) {
+          this.menuError.set(error.message);
+        }
       },
     });
+  }
+
+  /**
+   * "your last session" rather than a timestamp nobody can parse mid-order.
+   *
+   * Rounded hard on purpose: the cashier needs to know whether this is minutes old or days old, and
+   * "1h 42m ago" invites arithmetic at a counter with a queue.
+   */
+  protected syncedLabel(savedAt: Date): string {
+    const minutes = Math.round((Date.now() - savedAt.getTime()) / 60_000);
+
+    if (minutes < 60) {
+      return 'a few minutes ago';
+    }
+
+    const hours = Math.round(minutes / 60);
+
+    return hours < 24 ? `${String(hours)} hour${hours === 1 ? '' : 's'} ago` : 'your last session';
+  }
+
+  /**
+   * Puts a menu on screen, wherever it came from.
+   *
+   * Also hands the cart a way to look up a product's tier: the combo preview needs it and the cart
+   * deliberately does not hold the catalogue, so this is the one place that knows both. Built once
+   * per load rather than per keystroke.
+   */
+  private applyMenu(menu: readonly MenuCategory[]): void {
+    this.menu.set(menu);
+
+    const tierByProduct = new Map<string, string>();
+    for (const category of menu) {
+      for (const product of category.products) {
+        tierByProduct.set(product.id, category.name);
+      }
+    }
+    this.cart.setCategoryResolver((productId) => tierByProduct.get(productId));
   }
 
   /**

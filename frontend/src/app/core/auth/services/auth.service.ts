@@ -5,6 +5,8 @@ import { catchError, finalize, map, of, shareReplay, switchMap, tap, type Observ
 import { ApiEndpoints } from '../../constants/api-endpoints';
 import { AppRoutes } from '../../constants/app.constants';
 import { skipErrorNotification } from '../../http/interceptors/error.interceptor';
+import { skipLoading } from '../../http/interceptors/loading.interceptor';
+import { withTimeout } from '../../http/interceptors/timeout.interceptor';
 import type { ApiSuccessResponse } from '../../models/api-response.model';
 import type { Permission } from '../../models/permission.model';
 import { hasAtLeastRole, type Role } from '../../models/role.model';
@@ -16,6 +18,8 @@ import type {
   RefreshResponse,
 } from '../models/auth.model';
 import { TokenStorageService } from './token-storage.service';
+import { StorageKeys } from '../../constants/storage-keys';
+import { StorageService } from '../../services/storage.service';
 
 /**
  * Authentication state and operations.
@@ -25,21 +29,85 @@ import { TokenStorageService } from './token-storage.service';
  * against a stale value. Observables are kept only for the HTTP calls themselves,
  * where `retry`/`switchMap`/`shareReplay` are genuinely the right tools.
  */
+/**
+ * The last known identity, kept in local storage. Never a credential — see `sessionHint`.
+ */
+interface SessionHint {
+  readonly role: Role;
+  readonly permissions: readonly Permission[];
+}
+
+/**
+ * How long the session restore may wait for the API.
+ *
+ * Sized for a cold start on the free tier rather than for a healthy request: the service stops
+ * after fifteen idle minutes and takes the better part of a minute to come back. The app is usable
+ * throughout — nothing waits on this — so a long deadline costs nothing and saves the session.
+ */
+const COLD_START_TIMEOUT_MS = 90_000;
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly tokenStorage = inject(TokenStorageService);
 
+  private readonly storage = inject(StorageService);
+
   private readonly currentUser = signal<AuthUser | null>(null);
   /** True until the initial session restore settles. */
   private readonly initialising = signal(true);
+
+  /**
+   * Who this browser was signed in as when it was last used, or `null`.
+   *
+   * **Not a credential, and it cannot be made into one.** It holds a role and a list of permission
+   * strings — nothing the API would accept, no token, no signature. Every request still carries an
+   * access token the server issued, and the server re-authorises every action regardless of what
+   * this says. Editing it in devtools grants a user nothing except a menu that 403s.
+   *
+   * It exists because the app boots faster than the API wakes. A cold start on the free tier costs
+   * about a minute, and restoring a session is the first request the app makes; with nothing to go
+   * on, the guards treat a still-restoring session as no session and send a signed-in cashier to
+   * the login form — where signing in *also* waits on the same sleeping API. With it, the app can
+   * render the screens that identity had while the real answer is in flight.
+   *
+   * It carries permissions rather than a bare flag because `permissionGuard` and every
+   * `*pbHasPermission` in the app ask what the user may do, not merely whether they exist. A flag
+   * would have got the cashier past the front door and left them looking at an empty shell.
+   */
+  private readonly sessionHint = signal<SessionHint | null>(
+    this.storage.get<SessionHint | null>(StorageKeys.sessionHint, null),
+  );
+
+  /** Whether a previous session is remembered — see `sessionHint`. */
+  readonly hadSession: Signal<boolean> = computed(() => this.sessionHint() !== null);
+
+  /**
+   * True when the app should render as signed in: either it is, or it is about to be.
+   *
+   * The second case is the cold start. `isAuthenticated` stays strict — it means "there is a user
+   * object" — and this is what the guards ask, so the difference between the two is stated once
+   * here instead of being re-derived at every call site.
+   */
+  readonly isSignedInOrRestoring: Signal<boolean> = computed(
+    () => this.isAuthenticated() || (this.initialising() && this.hadSession()),
+  );
 
   readonly user: Signal<AuthUser | null> = this.currentUser.asReadonly();
   readonly isInitialising: Signal<boolean> = this.initialising.asReadonly();
 
   readonly isAuthenticated: Signal<boolean> = computed(() => this.currentUser() !== null);
-  readonly role: Signal<Role | null> = computed(() => this.currentUser()?.role ?? null);
+
+  /**
+   * The current role, falling back to the remembered one *only* while the session is being
+   * restored. Once the restore settles the hint is never consulted again — either a real user
+   * arrived, or there is no session and the answer is `null`.
+   */
+  readonly role: Signal<Role | null> = computed(
+    () =>
+      this.currentUser()?.role ?? (this.initialising() ? (this.sessionHint()?.role ?? null) : null),
+  );
   readonly displayName: Signal<string> = computed(() => this.currentUser()?.fullName ?? '');
 
   /**
@@ -49,11 +117,14 @@ export class AuthService {
    * detection pass, so an array `includes` over 20+ entries per call adds up.
    */
   private readonly permissionSet: Signal<ReadonlySet<Permission>> = computed(
-    () => new Set(this.currentUser()?.permissions ?? []),
+    () => new Set(this.permissions()),
   );
 
+  /** The same fallback as `role`, and for the same window. */
   readonly permissions: Signal<readonly Permission[]> = computed(
-    () => this.currentUser()?.permissions ?? [],
+    () =>
+      this.currentUser()?.permissions ??
+      (this.initialising() ? (this.sessionHint()?.permissions ?? []) : []),
   );
 
   /**
@@ -76,6 +147,7 @@ export class AuthService {
         tap((data) => {
           this.tokenStorage.set(data.accessToken, data.expiresAt);
           this.currentUser.set(data.user);
+          this.rememberSession(data.user);
         }),
         map((data) => data.user),
       );
@@ -110,7 +182,7 @@ export class AuthService {
    * bounce an already-authenticated user to the login page on reload.
    */
   restoreSession(): Observable<boolean> {
-    return this.refreshAccessToken().pipe(
+    return this.refreshAccessToken(COLD_START_TIMEOUT_MS).pipe(
       switchMap((token) => {
         if (token === null) {
           return of(false);
@@ -128,11 +200,17 @@ export class AuthService {
   loadCurrentUser(): Observable<AuthUser | null> {
     return this.http
       .get<ApiSuccessResponse<AuthUser>>(ApiEndpoints.auth.me, {
-        context: skipErrorNotification(),
+        // Restoring a session is background work — see the note on the refresh above.
+        context: skipLoading(skipErrorNotification()),
       })
       .pipe(
         map((response) => response.data),
-        tap((user) => this.currentUser.set(user)),
+        tap((user) => {
+          this.currentUser.set(user);
+          // Re-stamped on every restore, so a role or permission changed on the server is reflected
+          // in the hint the *next* cold start renders from.
+          this.rememberSession(user);
+        }),
         catchError(() => {
           this.clearSession();
           return of(null);
@@ -147,10 +225,33 @@ export class AuthService {
    * onto one request; the latch is released in `finalize` so a later refresh can
    * start cleanly.
    */
-  refreshAccessToken(): Observable<string | null> {
+  refreshAccessToken(deadlineMs?: number): Observable<string | null> {
     if (this.refreshInFlight !== null) {
       return this.refreshInFlight;
     }
+
+    /*
+     * The boot call passes its own deadline, and it has to.
+     *
+     * The app-wide 30s timeout is right for a refresh triggered by a 401 mid-shift: the API is
+     * awake, so a request that slow has failed. It is wrong for the *first* refresh after the
+     * service has been asleep, which is the one request that has to wait out a cold start of about
+     * a minute. Cut off at 30s it takes the session down with it, and the cashier — who was signed
+     * in — is asked to sign in again against an API that is still starting.
+     */
+    const context =
+      deadlineMs === undefined
+        ? skipErrorNotification()
+        : /*
+           * The boot call is also kept off the global progress bar.
+           *
+           * It runs for as long as the cold start does — up to the deadline above — and the bar is
+           * a *foreground* signal: a magenta line across the top and a "Still working…" toast, for
+           * a minute, over a POS the cashier is already using. The screens that depend on the API
+           * say so themselves, where the person is looking; a page-wide alarm for a request nobody
+           * is waiting on is the wrong instrument.
+           */
+          withTimeout(deadlineMs, skipLoading(skipErrorNotification()));
 
     this.refreshInFlight = this.http
       .post<ApiSuccessResponse<RefreshResponse>>(
@@ -159,7 +260,7 @@ export class AuthService {
         {
           // A failed refresh is a normal outcome — an anonymous visitor has no
           // cookie. Without this, every first-time visitor gets an error toast.
-          context: skipErrorNotification(),
+          context,
         },
       )
       .pipe(
@@ -228,8 +329,23 @@ export class AuthService {
     return current !== undefined && hasAtLeastRole(current, role);
   }
 
+  private rememberSession(user: AuthUser): void {
+    const hint: SessionHint = { role: user.role, permissions: user.permissions };
+    this.sessionHint.set(hint);
+    this.storage.set(StorageKeys.sessionHint, hint);
+  }
+
   private clearSession(): void {
     this.tokenStorage.clear();
     this.currentUser.set(null);
+
+    /*
+     * The hint goes with the session, including when the session is ended *for* us — an expired
+     * refresh cookie, a revoked token. Leaving it behind would make the guard hold the door open on
+     * every future load for a session that no longer exists, and the reward for that patience would
+     * be a redirect to the login page one round trip later instead of immediately.
+     */
+    this.sessionHint.set(null);
+    this.storage.remove(StorageKeys.sessionHint);
   }
 }

@@ -8,7 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -26,6 +26,21 @@ import { PaginatorComponent, type PageRequest } from '../paginator/paginator.com
 import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { SpinnerComponent } from '../spinner/spinner.component';
 import { TablePreferencesService } from './table-preferences.service';
+
+/**
+ * Viewport width at which a table is shown instead of cards, in pixels.
+ *
+ * Tailwind's `lg`. It is a measurement, not a preference: the widest table in the app —
+ * inventory, at eight columns — needs 830px, and the content area is the viewport less the 72px
+ * sidebar rail, so the two only meet at 1024. Below it the table cannot fit and can only scroll
+ * sideways.
+ *
+ * Two places depend on this and must not drift apart: `isMobile` observes it, and the
+ * `hideOnMobile` class in `cellClass` must use the Tailwind prefix for the same breakpoint (`lg:`).
+ * They were previously 600 and 640 respectively, which left a 40px band rendering a table with its
+ * optional columns still hidden.
+ */
+const PB_TABLE_MIN_WIDTH = 1024;
 
 /**
  * Generic, server-paginated table.
@@ -541,9 +556,30 @@ export class DataTableComponent<T> {
 
   protected readonly density = this.preferences.density;
 
-  /** Drives the table/card switch. Bridged from the CDK's observable API. */
+  /**
+   * Drives the table/card switch. Bridged from the CDK's observable API.
+   *
+   * The threshold is the width at which a full table actually fits, which is not the width at
+   * which a phone stops being a phone. This used to be `Breakpoints.XSmall` (599.98px) and the
+   * result was a table that rendered from 600px and then scrolled sideways for the next 400:
+   * inventory's eight columns need 830px, and the content area — the viewport less the 72px
+   * sidebar rail — does not reach that until the viewport is 1024. Measured across the range, the
+   * overflow was +362px at 640, +234 at 768, +158 at 844 (a phone in landscape) and +42 at 960,
+   * reaching zero only at 1024.
+   *
+   * Below that the card layout is not a downgrade. It renders every column as a label and value,
+   * so a tablet shows *more* of each row than a truncated table would, and nothing has to be
+   * dragged into view.
+   *
+   * `PB_TABLE_MIN_WIDTH` is shared with the `hideOnMobile` class in `cellClass`, which is applied
+   * by CSS and must agree with this. When they disagreed — 599.98 here against Tailwind's 640
+   * there — rows between 600 and 639 rendered as a table whose optional columns were still
+   * hidden, which is why the table looked deceptively narrow at exactly 600px.
+   */
   protected readonly isMobile = toSignal(
-    this.breakpoints.observe(Breakpoints.XSmall).pipe(map((state) => state.matches)),
+    this.breakpoints.observe(`(max-width: ${PB_TABLE_MIN_WIDTH - 0.02}px)`).pipe(
+      map((state) => state.matches),
+    ),
     { initialValue: false },
   );
 
@@ -797,7 +833,9 @@ export class DataTableComponent<T> {
     if (column.align === 'right') classes.push('text-right');
     if (column.align === 'center') classes.push('text-center');
     if (column.numeric === true) classes.push('tabular-nums');
-    if (column.hideOnMobile === true) classes.push('hidden', 'sm:table-cell');
+    // `lg:` must match `PB_TABLE_MIN_WIDTH`, which `isMobile` observes. It was `sm:`, which
+    // revealed every optional column from 640px — 384px before the table had room for them.
+    if (column.hideOnMobile === true) classes.push('hidden', 'lg:table-cell');
 
     return classes.join(' ');
   }

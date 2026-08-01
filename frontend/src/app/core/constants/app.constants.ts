@@ -6,6 +6,8 @@ export const AppRoutes = {
   profile: '/account/profile',
   changePassword: '/account/password',
   dashboard: '/dashboard',
+  /** Where a till device lands: the counter, which is all a POS-scoped session can use. */
+  posNewOrder: '/pos/new',
   forbidden: '/forbidden',
   notFound: '/not-found',
 } as const;

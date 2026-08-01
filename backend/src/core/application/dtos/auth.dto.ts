@@ -13,6 +13,16 @@ export interface RequestContext {
 export interface LoginInput extends RequestContext {
   readonly email: string;
   readonly password: string;
+  /**
+   * Sign this device in as the till: a six-month session scoped to taking orders.
+   *
+   * Requested by the client — the counter phone ticks a box on the login form — and the *scope* it
+   * produces is decided by the server, which is the part that matters. A client asking for a till
+   * session is asking for less, never more.
+   */
+  readonly tillDevice?: boolean | undefined;
+  /** What to call this device on the sessions list, e.g. "Counter phone". */
+  readonly deviceName?: string | undefined;
 }
 
 /**

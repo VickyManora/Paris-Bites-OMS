@@ -20,6 +20,8 @@ export class RefreshTokenPrismaRepository implements IRefreshTokenRepository {
       userId: row.userId,
       expiresAt: row.expiresAt,
       revokedAt: row.revokedAt,
+      scope: row.scope,
+      deviceName: row.deviceName,
     };
   }
 
@@ -31,6 +33,9 @@ export class RefreshTokenPrismaRepository implements IRefreshTokenRepository {
         expiresAt: data.expiresAt,
         userAgent: data.userAgent ?? null,
         ipAddress: data.ipAddress ?? null,
+        // The column defaults to FULL, so an omitted scope narrows nothing.
+        ...(data.scope === undefined ? {} : { scope: data.scope }),
+        deviceName: data.deviceName ?? null,
       },
     });
 
@@ -39,6 +44,8 @@ export class RefreshTokenPrismaRepository implements IRefreshTokenRepository {
       userId: row.userId,
       expiresAt: row.expiresAt,
       revokedAt: row.revokedAt,
+      scope: row.scope,
+      deviceName: row.deviceName,
     };
   }
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RefreshTokenUseCase } from '../../src/core/application/use-cases/auth/refresh-token.use-case.js';
 import { Role } from '../../src/core/domain/enums/role.enum.js';
+import { SessionScope } from '../../src/core/domain/enums/session-scope.enum.js';
 import { UserStatus } from '../../src/core/domain/enums/user-status.enum.js';
 import { UnauthorizedError } from '../../src/core/domain/errors/domain-error.js';
 import { AuditAction } from '../../src/core/domain/repositories/audit-log.repository.js';
@@ -154,5 +155,69 @@ describe('RefreshTokenUseCase', () => {
     await refresh(original);
 
     expect(audit.has(AuditAction.TOKEN_REFRESHED)).toBe(true);
+  });
+
+  /**
+   * The till device is signed in for six months on a phone that sits on a counter, and everything
+   * that makes that safe rests on the scope surviving rotation. A session that widens itself by
+   * refreshing — which it does every fifteen minutes — would be a full administrator session by
+   * lunchtime, and nothing anywhere else in the system would report it.
+   */
+  describe('till sessions', () => {
+    async function seedTillToken(): Promise<string> {
+      const issued = tokens.issueRefreshToken();
+      await refreshTokens.create({
+        tokenHash: issued.tokenHash,
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+        scope: SessionScope.POS,
+        deviceName: 'Counter phone',
+      });
+      return issued.token;
+    }
+
+    it('mints the new access token with the scope of the token it replaced', async () => {
+      const original = await seedTillToken();
+      tokens.issuedAccessPayloads.length = 0;
+
+      await refresh(original);
+
+      expect(tokens.issuedAccessPayloads.at(-1)?.scope).toBe(SessionScope.POS);
+    });
+
+    it('carries the scope onto the successor row, so the next rotation narrows too', async () => {
+      const original = await seedTillToken();
+      const result = await refresh(original);
+
+      const successor = await refreshTokens.findByTokenHash(
+        tokens.hashRefreshToken(result.refreshToken),
+      );
+
+      expect(successor?.scope).toBe(SessionScope.POS);
+    });
+
+    it('renews the long lifetime rather than dropping to the default', async () => {
+      const original = await seedTillToken();
+      tokens.refreshTtls.length = 0;
+
+      const result = await refresh(original);
+
+      // Six months, not the ordinary week — the counter must not be signed out mid-shift.
+      expect(tokens.refreshTtls.at(-1)).toBeGreaterThan(150 * 24 * 60 * 60 * 1000);
+      expect(result.refreshTokenExpiresAt.getTime() - Date.now()).toBeGreaterThan(
+        150 * 24 * 60 * 60 * 1000,
+      );
+    });
+
+    it('leaves an ordinary session on the default lifetime and no scope claim', async () => {
+      const original = await seedToken();
+      tokens.refreshTtls.length = 0;
+      tokens.issuedAccessPayloads.length = 0;
+
+      await refresh(original);
+
+      expect(tokens.refreshTtls.at(-1)).toBeUndefined();
+      expect(tokens.issuedAccessPayloads.at(-1)?.scope).toBe(SessionScope.FULL);
+    });
   });
 });

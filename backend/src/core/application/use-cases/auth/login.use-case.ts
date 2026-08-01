@@ -12,6 +12,7 @@ import type { IHashService } from '../../ports/hash.service.port.js';
 import type { ILogger } from '../../ports/logger.port.js';
 import type { ITokenService } from '../../ports/token.service.port.js';
 import type { IUseCase } from '../../ports/use-case.port.js';
+import { SessionScope } from '../../../domain/enums/session-scope.enum.js';
 
 /**
  * Deliberately identical message for every failure mode: unknown email, wrong
@@ -22,6 +23,16 @@ import type { IUseCase } from '../../ports/use-case.port.js';
  * guessing a password.
  */
 const INVALID_CREDENTIALS = 'The email or password you entered is incorrect.';
+
+/**
+ * How long a till device stays signed in: 180 days.
+ *
+ * Long enough that nobody at the counter ever meets the login form again, and short enough that a
+ * device forgotten in a drawer stops being a live session within the year. It is a *scoped*
+ * session — see `issueSession` — which is what makes six months a reasonable number rather than a
+ * reckless one.
+ */
+const TILL_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
 export class LoginUseCase implements IUseCase<LoginInput, AuthResult> {
   /**
@@ -80,13 +91,33 @@ export class LoginUseCase implements IUseCase<LoginInput, AuthResult> {
   }
 
   private async issueSession(user: User, input: LoginInput): Promise<AuthResult> {
+    /*
+     * A till sign-in is a different kind of session, and both differences are deliberate.
+     *
+     * The counter phone is signed in once and never again — the shop's API sleeps after fifteen
+     * idle minutes and takes about a minute to wake, so a login form is the worst possible thing to
+     * put between a cashier and a customer. A session measured in months removes it permanently.
+     *
+     * That is only defensible because of the second difference: the session is scoped to
+     * `POS_OPERATE` no matter who signs in. Sunil is an administrator; his till session is not. A
+     * phone left on the counter, or lost on the way home, can ring up an order and cannot read the
+     * day's takings, cancel a paid order, or touch inventory, suppliers or reports.
+     *
+     * The scope is stored on the token row as well as signed into the access token, so rotation
+     * carries it forward — see `RefreshToken.scope`.
+     */
+    const scope = input.tillDevice === true ? SessionScope.POS : SessionScope.FULL;
+
     const accessToken = this.tokens.issueAccessToken({
       sub: user.id,
       email: user.email,
       role: user.role,
+      scope,
     });
 
-    const refreshToken = this.tokens.issueRefreshToken();
+    const refreshToken = this.tokens.issueRefreshToken(
+      scope === SessionScope.POS ? TILL_SESSION_TTL_MS : undefined,
+    );
 
     await this.refreshTokens.create({
       // Only the digest is persisted, so a database leak cannot be replayed.
@@ -95,6 +126,8 @@ export class LoginUseCase implements IUseCase<LoginInput, AuthResult> {
       expiresAt: refreshToken.expiresAt,
       userAgent: input.userAgent,
       ipAddress: input.ipAddress,
+      scope,
+      deviceName: input.deviceName,
     });
 
     await this.users.recordLogin(user.id, new Date());
@@ -108,14 +141,16 @@ export class LoginUseCase implements IUseCase<LoginInput, AuthResult> {
       metadata: { userAgent: input.userAgent },
     });
 
-    this.logger.info('User signed in', { userId: user.id, role: user.role });
+    this.logger.info('User signed in', { userId: user.id, role: user.role, scope });
 
     return {
       accessToken: accessToken.token,
       accessTokenExpiresAt: accessToken.expiresAt.toISOString(),
       refreshToken: refreshToken.token,
       refreshTokenExpiresAt: refreshToken.expiresAt,
-      user: AuthMapper.toAuthenticatedUserDto(user),
+      // Scoped, for the same reason `/auth/me` is: the client draws its navigation from this list,
+      // and a till device must not be handed the administrator's.
+      user: AuthMapper.toAuthenticatedUserDto(user, scope),
     };
   }
 

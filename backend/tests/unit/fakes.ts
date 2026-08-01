@@ -1,3 +1,4 @@
+import { SessionScope } from '../../src/core/domain/enums/session-scope.enum.js';
 import { User, type UserProps } from '../../src/core/domain/entities/user.entity.js';
 import { Role } from '../../src/core/domain/enums/role.enum.js';
 import { UserStatus } from '../../src/core/domain/enums/user-status.enum.js';
@@ -157,6 +158,9 @@ export class FakeRefreshTokenRepository implements IRefreshTokenRepository {
       expiresAt: data.expiresAt,
       revokedAt: null,
       tokenHash: data.tokenHash,
+      // Mirrors the column default: an omitted scope narrows nothing.
+      scope: data.scope ?? SessionScope.FULL,
+      deviceName: data.deviceName ?? null,
     };
     this.records.set(id, record);
     return record;
@@ -222,9 +226,14 @@ export class FakeHashService implements IHashService {
 
 export class FakeTokenService implements ITokenService {
   issuedRefreshTokens: string[] = [];
+  /** Every access-token payload minted, so a test can assert on the claims rather than the string. */
+  issuedAccessPayloads: AccessTokenPayload[] = [];
+  /** The lifetimes asked for, so a test can prove a till session gets a long one. */
+  refreshTtls: (number | undefined)[] = [];
   private sequence = 0;
 
   issueAccessToken(payload: AccessTokenPayload): IssuedToken {
+    this.issuedAccessPayloads.push(payload);
     return {
       token: `access.${payload.sub}.${payload.role}.${++this.sequence}`,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
@@ -239,13 +248,14 @@ export class FakeTokenService implements ITokenService {
     return { sub, email: 'x@y.z', role: role as AccessTokenPayload['role'] };
   }
 
-  issueRefreshToken(): { token: string; tokenHash: string; expiresAt: Date } {
+  issueRefreshToken(ttlMs?: number): { token: string; tokenHash: string; expiresAt: Date } {
     const token = `refresh-${++this.sequence}`;
     this.issuedRefreshTokens.push(token);
+    this.refreshTtls.push(ttlMs);
     return {
       token,
       tokenHash: this.hashRefreshToken(token),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + (ttlMs ?? 7 * 24 * 60 * 60 * 1000)),
     };
   }
 

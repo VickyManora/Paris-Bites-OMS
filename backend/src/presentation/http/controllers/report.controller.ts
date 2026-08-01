@@ -5,7 +5,7 @@ import type {
   RunReportUseCase,
 } from '../../../core/application/use-cases/reports/run-report.use-case.js';
 import type { InventoryLocation } from '../../../core/domain/enums/inventory.enum.js';
-import { permissionsForRole } from '../../../core/domain/enums/permission.enum.js';
+import { permissionsForSession } from '../../../core/domain/enums/session-scope.enum.js';
 import type { ReportFormat, ReportId } from '../../../core/domain/enums/report.enum.js';
 import { NotFoundError, UnauthorizedError } from '../../../core/domain/errors/domain-error.js';
 import type { ReportFilters } from '../../../core/domain/repositories/report.repository.js';
@@ -90,7 +90,8 @@ export class ReportController {
     if (req.user === undefined) {
       throw new UnauthorizedError();
     }
-    return permissionsForRole(req.user.role);
+    // Session, not role: a till device holds POS_OPERATE alone whoever is signed into it.
+    return permissionsForSession(req.user.role, req.user.scope);
   }
 
   private nameOf(req: Request): string {

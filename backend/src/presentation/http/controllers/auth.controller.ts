@@ -36,11 +36,13 @@ export class AuthController {
 
   /** POST /auth/login */
   readonly login: RequestHandler = asyncHandler(async (req, res) => {
-    const { email, password } = req.body as LoginBody;
+    const { email, password, tillDevice, deviceName } = req.body as LoginBody;
 
     const result = await this.loginUseCase.execute({
       email,
       password,
+      tillDevice,
+      deviceName,
       ...this.contextOf(req),
     });
 
@@ -116,7 +118,10 @@ export class AuthController {
       throw new UnauthorizedError();
     }
 
-    const user = await this.getCurrentUserUseCase.execute({ userId: req.user.id });
+    const user = await this.getCurrentUserUseCase.execute({
+      userId: req.user.id,
+      scope: req.user.scope,
+    });
     sendSuccess(res, user);
   });
 

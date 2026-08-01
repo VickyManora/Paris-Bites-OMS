@@ -9,6 +9,7 @@ import type { RefreshInput, RefreshResult } from '../../dtos/auth.dto.js';
 import type { ILogger } from '../../ports/logger.port.js';
 import type { ITokenService } from '../../ports/token.service.port.js';
 import type { IUseCase } from '../../ports/use-case.port.js';
+import { SessionScope } from '../../../domain/enums/session-scope.enum.js';
 
 /** Same opaque message for every failure — see `LoginUseCase` for the reasoning. */
 const INVALID_SESSION = 'Your session has expired. Please sign in again.';
@@ -21,6 +22,14 @@ const INVALID_SESSION = 'Your session has expired. Please sign in again.';
  * single-use, so a stolen one is only useful until the legitimate client next
  * refreshes. The reuse check below is what turns that into active detection.
  */
+/**
+ * A rotated till session is renewed to a further 180 days, matching `LoginUseCase`.
+ *
+ * Rolling rather than fixed: a device in daily use never expires, and one that stops being used
+ * ages out six months after its last shift.
+ */
+const TILL_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+
 export class RefreshTokenUseCase implements IUseCase<RefreshInput, RefreshResult> {
   constructor(
     private readonly users: IUserRepository,
@@ -97,9 +106,29 @@ export class RefreshTokenUseCase implements IUseCase<RefreshInput, RefreshResult
       // on the next refresh rather than persisting until the user signs out.
       email: user.email,
       role: user.role,
+      /*
+       * The scope is carried from the token being rotated, never from the request.
+       *
+       * This is the line that makes a till session a till session for its whole life. If the
+       * successor were minted with the default, a POS device would hold a full session ten minutes
+       * after pairing — every refresh would quietly widen it, and the scope would be decoration.
+       */
+      scope: existing.scope,
     });
 
-    const nextToken = this.tokens.issueRefreshToken();
+    /*
+     * A rotated till token keeps its long life too, measured from now.
+     *
+     * Rotating it onto the default lifetime would sign the counter out days later, which is the
+     * failure this whole feature exists to remove — and it would do it silently, mid-shift, weeks
+     * after anyone touched the code.
+     */
+    const remainingLife = existing.expiresAt.getTime() - Date.now();
+    const nextToken = this.tokens.issueRefreshToken(
+      existing.scope === SessionScope.POS
+        ? Math.max(remainingLife, TILL_SESSION_TTL_MS)
+        : undefined,
+    );
 
     const successor = await this.refreshTokens.create({
       tokenHash: nextToken.tokenHash,
@@ -107,6 +136,8 @@ export class RefreshTokenUseCase implements IUseCase<RefreshInput, RefreshResult
       expiresAt: nextToken.expiresAt,
       userAgent: input.userAgent,
       ipAddress: input.ipAddress,
+      scope: existing.scope,
+      deviceName: existing.deviceName ?? undefined,
     });
 
     // Link old → new so the chain is traceable and reuse of the old token is

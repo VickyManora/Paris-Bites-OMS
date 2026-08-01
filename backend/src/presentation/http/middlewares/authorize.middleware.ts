@@ -1,9 +1,9 @@
 import type { RequestHandler } from 'express';
 import type { Permission } from '../../../core/domain/enums/permission.enum.js';
 import {
-  roleHasAllPermissions,
-  roleHasAnyPermission,
-} from '../../../core/domain/enums/permission.enum.js';
+  sessionHasAllPermissions,
+  sessionHasAnyPermission,
+} from '../../../core/domain/enums/session-scope.enum.js';
 import { hasAtLeastRole, type Role } from '../../../core/domain/enums/role.enum.js';
 import { ForbiddenError, UnauthorizedError } from '../../../core/domain/errors/domain-error.js';
 
@@ -23,6 +23,10 @@ import { ForbiddenError, UnauthorizedError } from '../../../core/domain/errors/d
  *
  * Preferred over role checks: when a third role appears, a permission check keeps
  * expressing the actual intent, while `role === 'ADMIN'` silently excludes it.
+ *
+ * Checks the **session**, not the role. A till device is signed in as a real user — Sunil, an
+ * administrator — and must still be refused everything except taking orders, so the question this
+ * asks is "what may this sign-in do", which is the role narrowed by the session's scope.
  */
 export function requirePermission(...permissions: readonly Permission[]): RequestHandler {
   return (req, _res, next) => {
@@ -31,7 +35,7 @@ export function requirePermission(...permissions: readonly Permission[]): Reques
       return;
     }
 
-    if (!roleHasAllPermissions(req.user.role, permissions)) {
+    if (!sessionHasAllPermissions(req.user.role, req.user.scope, permissions)) {
       next(new ForbiddenError());
       return;
     }
@@ -48,7 +52,7 @@ export function requireAnyPermission(...permissions: readonly Permission[]): Req
       return;
     }
 
-    if (!roleHasAnyPermission(req.user.role, permissions)) {
+    if (!sessionHasAnyPermission(req.user.role, req.user.scope, permissions)) {
       next(new ForbiddenError());
       return;
     }

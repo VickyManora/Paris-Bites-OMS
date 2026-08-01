@@ -256,8 +256,30 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
           <div
             class="pos-light-surface sticky top-0 z-10 -mx-pb-3 overflow-x-auto bg-pos-vanilla px-pb-3 py-pb-2 md:overflow-x-visible"
           >
-            <div class="flex w-max gap-pb-2 md:w-auto md:flex-wrap">
-              <button type="button" [class]="tabClass(allTab)" (click)="selectCategory(allTab)">
+            <!--
+              'role=group' with a label, and 'aria-pressed' per chip.
+
+              These are one mutually-exclusive filter, and they were a bare div of buttons: nothing
+              said the row was a set, and nothing announced which chip was current — the selected
+              state was carried by the brand gradient alone. A screen reader user heard six unrelated
+              buttons and could not tell which filter was applied.
+
+              'group' rather than 'tablist' deliberately. Tab semantics promise arrow-key navigation
+              between the tabs, and that is not implemented here; claiming the role without the
+              behaviour is worse than not claiming it, because it tells the user to press keys that
+              do nothing. Toggle buttons in a labelled group is what this actually is.
+            -->
+            <div
+              class="flex w-max gap-pb-2 md:w-auto md:flex-wrap"
+              role="group"
+              aria-label="Filter the menu by category"
+            >
+              <button
+                type="button"
+                [class]="tabClass(allTab)"
+                [attr.aria-pressed]="category() === allTab"
+                (click)="selectCategory(allTab)"
+              >
                 <span class="text-base leading-none" aria-hidden="true">✦</span>
                 All
                 <span [class]="countClass(allTab)">{{ totalProductCount() }}</span>
@@ -266,6 +288,7 @@ const COMPACT_QUERY = '(max-width: 767.98px)';
                 <button
                   type="button"
                   [class]="tabClass(category.id)"
+                  [attr.aria-pressed]="this.category() === category.id"
                   (click)="selectCategory(category.id)"
                 >
                   @if (category.icon) {

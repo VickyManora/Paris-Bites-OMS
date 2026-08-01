@@ -135,6 +135,29 @@ function loginIdentifier(control: AbstractControl): ValidationErrors | null {
       </mat-form-field>
 
       <!--
+        The one control on this form that is not about who you are.
+
+        Ticking it makes this device the till: signed in for six months, scoped by the API to taking
+        orders and nothing else. It exists because of what the counter's morning looks like — the
+        API sleeps after fifteen idle minutes and takes about a minute to wake, and a login form is
+        the worst possible thing to put between a cashier and a customer holding money.
+
+        The caption spells out the trade rather than hiding it. Somebody ticking this on their own
+        laptop should understand they are choosing a device that can only ring up orders, and
+        somebody ticking it on the shop phone should understand that is exactly the point: if that
+        phone is lost, what is lost with it is the ability to sell a waffle.
+      -->
+      <div class="mt-pb-1">
+        <mat-checkbox formControlName="tillDevice" class="!items-start">
+          <span class="block text-pb-body">Sign this device in as the till</span>
+          <span class="block text-pb-caption text-on-surface-variant">
+            Stays signed in for six months and can only take orders — no takings, no stock, no
+            cancellations.
+          </span>
+        </mat-checkbox>
+      </div>
+
+      <!--
         A real 'type="submit"', unlike the dialogs: this form is submitted with Enter from the password
         field as often as by pressing the button, so the native submit path is the primary one and
         'pb-submit-button' — which is deliberately 'type="button"' — would break it.
@@ -170,6 +193,15 @@ export class LoginPage {
   protected readonly form = this.formBuilder.nonNullable.group({
     email: ['', [Validators.required, loginIdentifier]],
     password: ['', [Validators.required]],
+    /**
+     * Whether this device becomes the till.
+     *
+     * A till session lasts six months and is scoped to taking orders — see `SessionScope` on the
+     * API. It is the answer to the counter's real problem: the shop's API sleeps after fifteen idle
+     * minutes and takes about a minute to wake, so a login form is the worst thing that can stand
+     * between a cashier and a customer. Signing in once, permanently, removes it.
+     */
+    tillDevice: [false],
   });
 
   protected readonly submitting = signal(false);
@@ -215,26 +247,32 @@ export class LoginPage {
     this.submitting.set(true);
     this.form.disable();
 
-    const { email, password } = this.form.getRawValue();
+    const { email, password, tillDevice } = this.form.getRawValue();
 
-    this.auth.login({ email, password }).subscribe({
-      next: () => {
-        void this.router.navigateByUrl(this.resolveReturnUrl());
-      },
-      error: (error: AppError) => {
-        this.submitting.set(false);
-        this.form.enable();
+    this.auth
+      .login({
+        email,
+        password,
+        ...(tillDevice ? { tillDevice: true, deviceName: 'Counter till' } : {}),
+      })
+      .subscribe({
+        next: () => {
+          void this.router.navigateByUrl(this.resolveReturnUrl());
+        },
+        error: (error: AppError) => {
+          this.submitting.set(false);
+          this.form.enable();
 
-        // Field-level messages from the server land under the right input;
-        // anything unmatched becomes the form-level message.
-        const unmatched = applyServerErrors(this.form, error);
-        this.formError.set(unmatched[0] ?? error.message);
+          // Field-level messages from the server land under the right input;
+          // anything unmatched becomes the form-level message.
+          const unmatched = applyServerErrors(this.form, error);
+          this.formError.set(unmatched[0] ?? error.message);
 
-        // Clear only the password. Making the user retype their email after a
-        // typo in the password is a pointless annoyance.
-        this.form.controls.password.reset();
-      },
-    });
+          // Clear only the password. Making the user retype their email after a
+          // typo in the password is a pointless annoyance.
+          this.form.controls.password.reset();
+        },
+      });
   }
 
   /**
@@ -246,6 +284,17 @@ export class LoginPage {
    * site.
    */
   private resolveReturnUrl(): string {
+    /*
+     * A till lands on the counter, whatever it was headed for.
+     *
+     * The session is scoped to taking orders, so the dashboard it would otherwise open — the app's
+     * default — is a page of cards that would all 403. Sending it to the order screen is not a
+     * convenience; it is the only screen this session can actually use.
+     */
+    if (this.form.getRawValue().tillDevice) {
+      return AppRoutes.posNewOrder;
+    }
+
     // `queryParams` is loosely typed, and this value is user-controlled, so
     // narrow it rather than trusting it.
     const requested: unknown = this.router.parseUrl(this.router.url).queryParams['returnUrl'];

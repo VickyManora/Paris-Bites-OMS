@@ -26,6 +26,16 @@ export interface AuthUser {
 export interface LoginRequest {
   readonly email: string;
   readonly password: string;
+  /**
+   * Sign this device in as the till: a six-month session the API scopes to taking orders.
+   *
+   * Asking for it can only ever produce *fewer* permissions than the account holds, which is why
+   * it is safe for the client to ask at all — the server decides what the scope means, and the
+   * narrowing is enforced on every request.
+   */
+  readonly tillDevice?: boolean;
+  /** What to call this device on the sessions list. */
+  readonly deviceName?: string;
 }
 
 /**

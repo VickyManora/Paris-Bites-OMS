@@ -102,9 +102,27 @@ model User {
 
 /// Opaque refresh tokens, stored hashed so a database leak cannot be replayed.
 /// Access tokens stay stateless (JWT); only refresh tokens are revocable.
+/// What a session may do, which may be less than its user's role allows.
+/// See `session-scope.enum.ts` — POS is the till device, signed in for months and
+/// able to take orders and nothing else.
+enum SessionScope {
+  FULL
+  POS
+}
+
 model RefreshToken {
   id        String @id @default(uuid()) @db.Uuid
   tokenHash String @unique @map("token_hash")
+
+  /// Carried on the row, not only in the access token, so that **rotation cannot
+  /// widen a session**: every successor is minted with the scope of the token it
+  /// replaces. A till that could rotate its way to a full session would be a till
+  /// with no scope at all.
+  scope SessionScope @default(FULL)
+
+  /// What the person who signed in called this device. Shown on the sessions list
+  /// so "revoke the one in the shop" is a decision someone can actually make.
+  deviceName String? @map("device_name")
 
   userId String @map("user_id") @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

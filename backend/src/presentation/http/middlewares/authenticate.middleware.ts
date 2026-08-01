@@ -28,7 +28,12 @@ export function authenticate(tokenService: ITokenService): RequestHandler {
 
     try {
       const payload = tokenService.verifyAccessToken(token);
-      req.user = { id: payload.sub, email: payload.email, role: payload.role };
+      req.user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        ...(payload.scope === undefined ? {} : { scope: payload.scope }),
+      };
       next();
     } catch (error) {
       next(error);

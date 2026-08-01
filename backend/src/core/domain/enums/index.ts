@@ -41,6 +41,13 @@ export {
   roleHasPermission,
 } from './permission.enum.js';
 export {
+  isSessionScope,
+  permissionsForSession,
+  SessionScope,
+  sessionHasAllPermissions,
+  sessionHasAnyPermission,
+} from './session-scope.enum.js';
+export {
   ALL_TRANSFER_STATUSES,
   canTransition,
   isInTransit,

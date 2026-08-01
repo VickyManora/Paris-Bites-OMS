@@ -1,8 +1,16 @@
+import type { SessionScope } from '../enums/session-scope.enum.js';
+
 export interface RefreshTokenRecord {
   readonly id: string;
   readonly userId: string;
   readonly expiresAt: Date;
   readonly revokedAt: Date | null;
+  /**
+   * What this session may do. Read on rotation so a successor inherits it — a session that could
+   * widen its own scope by refreshing would have no scope at all.
+   */
+  readonly scope: SessionScope;
+  readonly deviceName: string | null;
 }
 
 export interface CreateRefreshTokenData {
@@ -12,6 +20,9 @@ export interface CreateRefreshTokenData {
   readonly expiresAt: Date;
   readonly userAgent?: string | undefined;
   readonly ipAddress?: string | undefined;
+  /** Defaults to `FULL` — an ordinary sign-in narrows nothing. */
+  readonly scope?: SessionScope | undefined;
+  readonly deviceName?: string | undefined;
 }
 
 /**

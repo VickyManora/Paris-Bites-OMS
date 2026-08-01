@@ -45,7 +45,24 @@ export interface NavSection {
 export const NAV_SECTIONS: readonly NavSection[] = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', icon: 'dashboard', route: '/dashboard', exact: true }],
+    items: [
+      {
+        label: 'Dashboard',
+        icon: 'dashboard',
+        route: '/dashboard',
+        exact: true,
+        /*
+         * The one permission the dashboard's own API already requires.
+         *
+         * It was omitted here, which read as "any authenticated user" and was true until sessions
+         * could be narrower than their user. A till device holds `POS_OPERATE` alone, so it was
+         * being offered a link to a page whose every request answers 403 — the API was right and
+         * the rail was lying. Stating the requirement makes the rail show what the session can
+         * actually open, which is the only thing a navigation is for.
+         */
+        permission: Permission.STOCK_READ,
+      },
+    ],
   },
   {
     /*
@@ -302,11 +319,18 @@ export const NAV_SECTIONS: readonly NavSection[] = [
           />
         </button>
       } @else {
-        <!-- Home is the conventional destination for a wordmark, and the one every user tries. -->
+        <!--
+          Home is the conventional destination for a wordmark, and the one every user tries — which
+          is why it cannot be a fixed '/dashboard'. A till device holds POS_OPERATE alone, and the
+          dashboard answers 403 to it: a wordmark that lands on a permission error is the one link
+          on the page nobody expects to be able to get wrong.
+        -->
         <a
-          routerLink="/dashboard"
+          [routerLink]="homeRoute()"
           class="group flex min-w-0 flex-1 items-center gap-pb-2 rounded-pb-lg py-1 no-underline"
-          aria-label="Paris Bites — go to dashboard"
+          [attr.aria-label]="
+            'Paris Bites — go to ' + (homeRoute() === '/dashboard' ? 'dashboard' : 'the counter')
+          "
           (click)="navigate.emit()"
         >
           <span
@@ -585,6 +609,16 @@ export class AppSidebarComponent {
    * Sections the current user may see. Sections left empty are dropped, so a
    * heading never appears with nothing beneath it.
    */
+  /**
+   * Where the wordmark goes: the first screen this session can actually open.
+   *
+   * The dashboard for everyone who may read it, and the counter for a session that may only take
+   * orders. Derived from the same permissions the rail is filtered by, so the two cannot disagree.
+   */
+  protected readonly homeRoute = computed(() =>
+    this.auth.can(Permission.STOCK_READ) ? '/dashboard' : '/pos/new',
+  );
+
   protected readonly visibleSections = computed<readonly NavSection[]>(() => {
     if (!this.auth.isAuthenticated()) {
       return [];

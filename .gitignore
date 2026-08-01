@@ -40,3 +40,7 @@ Thumbs.db
 # unaffected.
 /Screenshot*.png
 /Screen Shot*.png
+
+# Database backups taken before a destructive change. Real order and customer rows —
+# business data, never committed. Kept locally so a mistaken delete can be undone.
+backend/.backups/

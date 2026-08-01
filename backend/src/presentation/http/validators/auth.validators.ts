@@ -45,6 +45,16 @@ export const loginSchema = z.object({
     .min(1, 'Password is required.')
     // Bounded so an enormous body cannot be pushed through bcrypt.
     .max(128, 'Password must be at most 128 characters.'),
+
+  /*
+   * Sign this device in as the till — a six-month session scoped to taking orders.
+   *
+   * The client asks; the server decides what that means. Asking for a till session can only ever
+   * produce *fewer* permissions than the account holds, so an attacker who flips this flag on
+   * somebody else's login attempt has restricted them, not escalated anything.
+   */
+  tillDevice: z.boolean().optional(),
+  deviceName: z.string().trim().max(60, 'Device name must be at most 60 characters.').optional(),
 });
 
 export const changePasswordSchema = z

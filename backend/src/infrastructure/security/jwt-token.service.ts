@@ -6,6 +6,7 @@ import type {
   ITokenService,
 } from '../../core/application/ports/token.service.port.js';
 import { isRole } from '../../core/domain/enums/role.enum.js';
+import { isSessionScope, SessionScope } from '../../core/domain/enums/session-scope.enum.js';
 import { UnauthorizedError } from '../../core/domain/errors/domain-error.js';
 
 export interface JwtTokenServiceOptions {
@@ -41,7 +42,15 @@ export class JwtTokenService implements ITokenService {
     };
 
     const token = jwt.sign(
-      { email: payload.email, role: payload.role },
+      {
+        email: payload.email,
+        role: payload.role,
+        // Omitted for a full session, so an ordinary token is byte-for-byte what it was before this
+        // concept existed and `scope` in a token always *means* something.
+        ...(payload.scope === undefined || payload.scope === SessionScope.FULL
+          ? {}
+          : { scope: payload.scope }),
+      },
       this.options.accessSecret,
       signOptions,
     );
@@ -68,23 +77,39 @@ export class JwtTokenService implements ITokenService {
     }
 
     const { sub, email, role } = decoded;
+    // Read as `unknown` rather than destructured: `JwtPayload` types unknown claims as `any`, and
+    // an `any` flowing into the returned payload defeats the check three lines below it.
+    const scope: unknown = decoded['scope'];
 
     if (typeof sub !== 'string' || typeof email !== 'string' || !isRole(role)) {
       throw new UnauthorizedError('Your session is invalid or has expired.');
     }
 
-    return { sub, email, role };
+    /*
+     * An unrecognised scope is rejected rather than ignored.
+     *
+     * Ignoring it would mean a token claiming `scope: "anything"` authorises as a full session,
+     * which turns a typo — or a forged claim on a leaked signing key — into an escalation. The
+     * only value that widens a session is the absence of the claim entirely, which is what tokens
+     * issued before this existed carry.
+     */
+    if (scope !== undefined && !isSessionScope(scope)) {
+      throw new UnauthorizedError('Your session is invalid or has expired.');
+    }
+
+    return { sub, email, role, ...(scope === undefined ? {} : { scope }) };
   }
 
-  issueRefreshToken(): { token: string; tokenHash: string; expiresAt: Date } {
+  issueRefreshToken(ttlMs?: number): { token: string; tokenHash: string; expiresAt: Date } {
     // 512 bits of entropy — brute force is not a concern, so the token can stay
     // opaque and cheap to compare.
     const token = randomBytes(64).toString('base64url');
+    const lifetime = ttlMs ?? this.parseDurationMs(this.options.refreshExpiresIn);
 
     return {
       token,
       tokenHash: this.hashRefreshToken(token),
-      expiresAt: new Date(Date.now() + this.parseDurationMs(this.options.refreshExpiresIn)),
+      expiresAt: new Date(Date.now() + lifetime),
     };
   }
 

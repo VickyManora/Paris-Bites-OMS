@@ -12,8 +12,12 @@ import type {
   ListOrdersUseCase,
 } from '../../../core/application/use-cases/pos/read-orders.use-case.js';
 import type { IProductRepository } from '../../../core/domain/repositories/pos.repository.js';
-import { permissionsForRole } from '../../../core/domain/enums/permission.enum.js';
-import type { DiscountType, OrderStatus, PaymentMethod } from '../../../core/domain/enums/pos.enum.js';
+import { permissionsForSession } from '../../../core/domain/enums/session-scope.enum.js';
+import type {
+  DiscountType,
+  OrderStatus,
+  PaymentMethod,
+} from '../../../core/domain/enums/pos.enum.js';
 import type { SalesChannel } from '../../../core/domain/enums/sales.enum.js';
 import {
   NotFoundError,
@@ -57,7 +61,10 @@ export class PosController {
   readonly menu: RequestHandler = asyncHandler(async (req, res) => {
     const query = req.query as unknown as MenuQueryInput;
 
-    sendSuccess(res, await this.menuUseCase.execute({ includeUnavailable: query.includeUnavailable }));
+    sendSuccess(
+      res,
+      await this.menuUseCase.execute({ includeUnavailable: query.includeUnavailable }),
+    );
   });
 
   /** GET /pos/summary — today's figures, scoped to what the caller may see. */
@@ -237,7 +244,8 @@ export class PosController {
       throw new UnauthorizedError();
     }
 
-    return permissionsForRole(req.user.role);
+    // Session, not role: a till device holds POS_OPERATE alone whoever is signed into it.
+    return permissionsForSession(req.user.role, req.user.scope);
   }
 
   private contextOf(req: Request): RequestContext {
